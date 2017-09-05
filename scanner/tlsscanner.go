@@ -11,10 +11,6 @@ import (
 	"github.com/tumi8/tls"
 )
 
-const http_header_hpkp = "Public-Key-Pins"
-const http_header_hpkp_report_only = "Public-Key-Pins-Report-Only"
-const http_header_hsts = "Strict-Transport-Security"
-
 var scsvCiphers = []uint16{
 	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -31,16 +27,21 @@ var scsvCiphers = []uint16{
 
 // TLSScanner implements the scanning of the TLS protocol
 type TLSScanner struct {
-	inputChan  chan *Target
-	outputChan chan *Target
-	doHTTP     bool
-	doSCSV     bool
+	inputChan   chan *Target
+	outputChan  chan *Target
+	doHTTP      bool
+	HTTPHeaders []string
+	doSCSV      bool
 }
 
 // NewTLSScanner returns an initialized TLSScanner struct
-func NewTLSScanner(doHTTP bool, doSCSV bool) TLSScanner {
+func NewTLSScanner(httpHeaders string, doSCSV bool) TLSScanner {
+
+	doHTTP := httpHeaders != ""
+	headerList := strings.Split(httpHeaders, ",")
+
 	// Create channels for input and output targets
-	return TLSScanner{make(chan *Target, 10000), make(chan *Target), doHTTP, doSCSV}
+	return TLSScanner{make(chan *Target, 10000), make(chan *Target), doHTTP, headerList, doSCSV}
 }
 
 func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, scsv bool) (*tls.Conn, error) {
@@ -79,7 +80,7 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 			code, httpHeaders, err := getHTTPHeaders(tlsConn, serverName)
 			httpCode = code
 			if err == nil {
-				for _, key := range []string{http_header_hpkp, http_header_hpkp_report_only, http_header_hsts} {
+				for _, key := range s.HTTPHeaders {
 					value := httpHeaders.Get(key)
 					if value != "" {
 						headersStr += key + ": " + value + "\n"
