@@ -58,7 +58,7 @@ func (s SSHScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 	}
 
 	var sshResult SSHResult
-	if serverInfo != nil {
+	if serverInfo != nil && serverInfo.ServerVersion != "" && serverInfo.Key != nil {
 		split := strings.SplitN(serverInfo.ServerVersion, "-", 3)
 		sshVersion, serverVersion := strings.Join(split[0:2], "-"), split[2]
 
