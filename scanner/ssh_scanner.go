@@ -58,15 +58,20 @@ func (s SSHScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 	}
 
 	var sshResult SSHResult
-	if serverInfo != nil && serverInfo.ServerVersion != "" && serverInfo.Key != nil {
+	if serverInfo != nil && serverInfo.ServerVersion != "" {
 		split := strings.SplitN(serverInfo.ServerVersion, "-", 3)
-		sshVersion, serverVersion := strings.Join(split[0:2], "-"), split[2]
+
+		var sshVersion, serverVersion string
+		if len(split) == 3 {
+			sshVersion, serverVersion = strings.Join(split[0:2], "-"), split[2]
+		} else {
+			sshVersion, serverVersion = "", serverInfo.ServerVersion
+		}
 
 		sshResult = SSHResult{
 			sshVersion:               sshVersion,
 			serverVersion:            serverVersion,
 			hostKey:                  serverInfo.Key,
-			fingerprint:              ssh.FingerprintSHA256(serverInfo.Key),
 			macsClientServer:         serverInfo.ServerInit.MACsClientServer,
 			macsServerClient:         serverInfo.ServerInit.MACsServerClient,
 			ciphersClientServer:      serverInfo.ServerInit.CiphersClientServer,
@@ -78,6 +83,12 @@ func (s SSHScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 			languagesClientServer:    serverInfo.ServerInit.LanguagesClientServer,
 			languagesServerClient:    serverInfo.ServerInit.LanguagesServerClient,
 			err: nil,
+		}
+
+		if serverInfo.Key != nil {
+			sshResult.fingerprint = ssh.FingerprintSHA256(serverInfo.Key)
+		} else {
+			sshResult.fingerprint = ""
 		}
 	}
 
