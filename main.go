@@ -44,8 +44,9 @@ var opts struct {
 	Verbose    []bool `short:"v" long:"verbose" description:"Increase verbosity from warning to info or even debug"`
 	Version    bool   `short:"V" long:"version" description:"Show version information"`
 
-	HTTPHeaders string `long:"http-headers" description:"Establish HTTP connection and store headers specified as comma-separated list. No HTTP connection if omitted"`
-	SCSV        bool   `long:"scsv" description:"Send SCSV pseudo cipher suite"`
+	HTTPHeaders  string   `long:"http-headers" description:"Establish HTTP connection and store headers specified as comma-separated list. No HTTP connection if omitted"`
+	HTTPRequests []string `long:"http-request" description:"Establish HTTP connection and perform request to URL. Format: REQUEST-METHOD,PATH, e.g. GET,index.html. Can be specified more than once"`
+	SCSV         bool     `long:"scsv" description:"Send SCSV pseudo cipher suite"`
 
 	SSH bool `long:"ssh" description:"Scan SSH instead of TLS"`
 }
@@ -231,7 +232,7 @@ func main() {
 				fileScsv = ""
 			}
 
-			if opts.HTTPHeaders == "" {
+			if opts.HTTPHeaders == "" && len(opts.HTTPRequests) == 0 {
 				fileHttp = ""
 			}
 
@@ -254,7 +255,7 @@ func startSSHScanner(addr *net.TCPAddr) scanner.Scanner {
 // startTLSScanner creates a TLSScanner, starts the scanning routine and returns the scanner
 func startTLSScanner(addr *net.TCPAddr) scanner.Scanner {
 	// Create scanner and start scanning
-	s := scanner.Scanner{scanner.NewTLSScanner(opts.HTTPHeaders, opts.SCSV), opts.Concurrency, opts.QPS, time.Duration(opts.Timeout) * time.Millisecond, time.Duration(opts.SynTimeout) * time.Millisecond, addr, opts.Input}
+	s := scanner.Scanner{scanner.NewTLSScanner(opts.HTTPHeaders, opts.HTTPRequests, opts.SCSV), opts.Concurrency, opts.QPS, time.Duration(opts.Timeout) * time.Millisecond, time.Duration(opts.SynTimeout) * time.Millisecond, addr, opts.Input}
 	s.Scan()
 	return s
 }

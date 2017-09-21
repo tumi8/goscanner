@@ -27,21 +27,27 @@ var scsvCiphers = []uint16{
 
 // TLSScanner implements the scanning of the TLS protocol
 type TLSScanner struct {
-	inputChan   chan *Target
-	outputChan  chan *Target
-	doHTTP      bool
-	HTTPHeaders []string
-	doSCSV      bool
+	inputChan    chan *Target
+	outputChan   chan *Target
+	doHTTP       bool
+	HTTPHeaders  []string
+	HTTPRequests []string
+	doSCSV       bool
 }
 
 // NewTLSScanner returns an initialized TLSScanner struct
-func NewTLSScanner(httpHeaders string, doSCSV bool) TLSScanner {
+func NewTLSScanner(httpHeaders string, httpRequests []string, doSCSV bool) TLSScanner {
 
-	doHTTP := httpHeaders != ""
+	doHTTP := httpHeaders != "" || len(httpRequests) != 0
 	headerList := strings.Split(httpHeaders, ",")
 
+	// Execute HEAD request on root path by default
+	if doHTTP && len(httpRequests) == 0 {
+		httpRequests = []string{"HEAD,/"}
+	}
+
 	// Create channels for input and output targets
-	return TLSScanner{make(chan *Target, 10000), make(chan *Target), doHTTP, headerList, doSCSV}
+	return TLSScanner{make(chan *Target, 10000), make(chan *Target), doHTTP, headerList, httpRequests, doSCSV}
 }
 
 func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, scsv bool) (*tls.Conn, error) {
@@ -73,13 +79,18 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 	if err != nil {
 		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), err})
 	} else {
-		var httpCode int
-		var headersStr string
 
 		if s.doHTTP {
-			code, httpHeaders, err := getHTTPHeaders(tlsConn, serverName)
-			httpCode = code
-			if err == nil {
+
+			for _, req := range s.HTTPRequests {
+				var httpCode int
+				var headersStr string
+
+				reqSplit := strings.SplitN(req, ",", 2)
+				method, path := reqSplit[0], reqSplit[1]
+
+				httpCode, httpHeaders, err := getHTTPHeaders(tlsConn, serverName, method, path)
+
 				for _, key := range s.HTTPHeaders {
 					value := httpHeaders.Get(key)
 					if value != "" {
@@ -87,13 +98,13 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 					}
 				}
 				headersStr = strings.TrimRight(headersStr, "\n")
-			} else {
-				headersStr = err.Error()
-			}
 
+				// Add HTTP result
+				(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), HTTPResult{method, path, httpCode, headersStr, err}})
+			}
 		}
 		// Add TLS certs to result
-		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, serverName, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, httpCode, headersStr, err}})
+		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, serverName, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
 
 		if s.doSCSV {
 
@@ -128,9 +139,10 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 	}
 }
 
-// getHTTPHeaders sends a HEAD request and returns HTTP headers
-func getHTTPHeaders(tlsConn *tls.Conn, serverName string) (int, http.Header, error) {
-	req, err := http.NewRequest("HEAD", "https://"+serverName+"/", nil)
+// getHTTPHeaders sends a HTTP request and returns HTTP headers
+func getHTTPHeaders(tlsConn *tls.Conn, serverName string, method string, path string) (int, http.Header, error) {
+
+	req, err := http.NewRequest(method, "https://"+serverName+path, nil)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -147,6 +159,8 @@ func getHTTPHeaders(tlsConn *tls.Conn, serverName string) (int, http.Header, err
 	if err != nil {
 		return -1, nil, err
 	}
+	// Close response in order to make additional requests
+	resp.Body.Close()
 
 	return resp.StatusCode, resp.Header, nil
 }

@@ -347,13 +347,34 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 					continue
 				} else {
 
-					// Try to convert the result in an error value
-					handshakeError, ok = res.result.(error)
-					if !ok || handshakeError == nil {
-						// unknown error, continue with next host
+					// Try to convert the result in an HTTPResult
+					httpRes, ok := res.result.(HTTPResult)
+					if ok {
+						// Write row in HTTP CSV file
+						// [host, port, server_name, http_method, http_path, http_code, http_headers
+						httpCsv := csv.NewWriter(httpFh)
+						defer httpCsv.Flush()
+						errorStr := ""
+						if httpRes.httpError != nil {
+							errorStr = httpRes.httpError.Error()
+						}
+						if ok := httpCsv.Write([]string{ip, port, tlsRes.serverName, httpRes.httpMethod, httpRes.httpPath, strconv.Itoa(httpRes.httpCode), httpRes.httpHeaders, errorStr}); ok != nil {
+							log.WithFields(log.Fields{
+								"file": httpFh.Name(),
+							}).Error("Error writing to HTTP file")
+						}
+
 						continue
+					} else {
+
+						// Try to convert the result in an error value
+						handshakeError, ok = res.result.(error)
+						if !ok || handshakeError == nil {
+							// unknown error, continue with next host
+							continue
+						}
+						resultString = handshakeErrorLookup(handshakeError)
 					}
-					resultString = handshakeErrorLookup(handshakeError)
 				}
 			}
 
@@ -417,23 +438,6 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				log.WithFields(log.Fields{
 					"file": hostFh.Name(),
 				}).Error("Error writing to host file")
-			}
-
-			// Write row in HTTP CSV file
-			// [host, port, server_name, http_code, http_headers
-			if tlsRes.httpCode != 0 {
-				httpCsv := csv.NewWriter(httpFh)
-				defer httpCsv.Flush()
-				errorStr := ""
-				if tlsRes.err != nil {
-					errorStr = err.Error()
-				}
-				if ok := httpCsv.Write([]string{ip, port, tlsRes.serverName, strconv.Itoa(tlsRes.httpCode), tlsRes.httpHeaders, errorStr}); ok != nil {
-					log.WithFields(log.Fields{
-						"file": httpFh.Name(),
-					}).Error("Error writing to HTTP file")
-				}
-
 			}
 		}
 	}

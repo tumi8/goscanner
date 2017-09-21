@@ -28,7 +28,7 @@ var certCsvHeader = []string{"cert", "cert_hash"}
 var scsvCsvHeader = []string{"host", "port", "server_name", "time", "protocol", "cipher", "error_data"}
 
 // httpCsvHeader represents the header line of the http.csv file
-var httpCsvHeader = []string{"host", "port", "server_name", "http_code", "http_headers", "error_data"}
+var httpCsvHeader = []string{"host", "port", "server_name", "http_method", "http_path", "http_code", "http_headers", "error_data"}
 
 // TLSLiveProcessor implements the processing of TLS scanning results
 type TLSLiveProcessor struct {
@@ -43,9 +43,16 @@ type TLSResult struct {
 	serverName   string
 	version      uint16
 	cipher       uint16
-	httpCode     int
-	httpHeaders  string
 	err          error
+}
+
+// HTTPResult is the result of a HTTPS connection with a specific HTTP request
+type HTTPResult struct {
+	httpMethod  string
+	httpPath    string
+	httpCode    int
+	httpHeaders string
+	httpError   error
 }
 
 // SCSVResult is the result of a TLS handshake with the SCSV downgrade protection pseudo cipher
@@ -135,14 +142,14 @@ func (t TLSLiveProcessor) ProcessResult(hIn *Target) {
 		cert := tlsRes.certificates[len(tlsRes.certificates)-1]
 		if err != nil {
 			// Only RSA and ECDSA public keys are supported
-			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, -1, "", err}})
+			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, err}})
 			continue
 		}
 		hash := getSHA256(cert.Raw)
 
 		// Certificate is not in database
 		if !db.QueryChecksum(address, hex.EncodeToString(hash)) {
-			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, -1, "", errors.New("certificate not in database")}})
+			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, errors.New("certificate not in database")}})
 		}
 	}
 
