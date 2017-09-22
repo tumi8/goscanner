@@ -40,7 +40,6 @@ type TLSLiveProcessor struct {
 // TLSResult is an instance of result from ScanResult with TLS certificates, version and cipher
 type TLSResult struct {
 	certificates []*x509.Certificate
-	serverName   string
 	version      uint16
 	cipher       uint16
 	err          error
@@ -57,10 +56,9 @@ type HTTPResult struct {
 
 // SCSVResult is the result of a TLS handshake with the SCSV downgrade protection pseudo cipher
 type SCSVResult struct {
-	serverName string
-	version    uint16
-	cipher     uint16
-	err        error
+	version uint16
+	cipher  uint16
+	err     error
 }
 
 // NewTLSLiveProcessor returns a new processor for results of live scanned TLS hosts
@@ -142,14 +140,14 @@ func (t TLSLiveProcessor) ProcessResult(hIn *Target) {
 		cert := tlsRes.certificates[len(tlsRes.certificates)-1]
 		if err != nil {
 			// Only RSA and ECDSA public keys are supported
-			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, err}})
+			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.version, tlsRes.cipher, err}})
 			continue
 		}
 		hash := getSHA256(cert.Raw)
 
 		// Certificate is not in database
 		if !db.QueryChecksum(address, hex.EncodeToString(hash)) {
-			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.serverName, tlsRes.version, tlsRes.cipher, errors.New("certificate not in database")}})
+			h.AddResult(address, &ScanResult{res.synStart, res.synEnd, res.scanEnd, TLSResult{nil, tlsRes.version, tlsRes.cipher, errors.New("certificate not in database")}})
 		}
 	}
 

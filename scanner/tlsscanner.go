@@ -104,7 +104,7 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 			}
 		}
 		// Add TLS certs to result
-		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, serverName, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
+		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
 
 		if s.doSCSV {
 
@@ -120,7 +120,7 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 
 			conn, err = dialer.Dial("tcp", ip)
 			if err != nil {
-				(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{serverName, 0, 0, err}})
+				(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{0, 0, err}})
 			} else {
 
 				// Use SCSV pseudo cipher with decreased TLS version
@@ -128,9 +128,9 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 
 				if err != nil {
 					// This is what should happen according to RFC 7507
-					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{serverName, 0, 0, err}})
+					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{0, 0, err}})
 				} else {
-					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{serverName, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
+					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
 				}
 
 				conn.Close()

@@ -339,7 +339,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 						cipher = "not set"
 					}
 
-					if ok := scsvCsv.Write([]string{ip, port, scsvRes.serverName, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), strconv.FormatInt(res.scanEnd.Add(timediff).Unix(), 10), protocol, cipher, scsvRes.err.Error()}); ok != nil {
+					if ok := scsvCsv.Write([]string{ip, port, h.domain, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), strconv.FormatInt(res.scanEnd.Add(timediff).Unix(), 10), protocol, cipher, scsvRes.err.Error()}); ok != nil {
 						log.WithFields(log.Fields{
 							"file": scsvFh.Name(),
 						}).Error("Error writing to SCSV file")
@@ -358,7 +358,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 						if httpRes.httpError != nil {
 							errorStr = httpRes.httpError.Error()
 						}
-						if ok := httpCsv.Write([]string{ip, port, tlsRes.serverName, httpRes.httpMethod, httpRes.httpPath, strconv.Itoa(httpRes.httpCode), httpRes.httpHeaders, errorStr}); ok != nil {
+						if ok := httpCsv.Write([]string{ip, port, h.domain, httpRes.httpMethod, httpRes.httpPath, strconv.Itoa(httpRes.httpCode), httpRes.httpHeaders, errorStr}); ok != nil {
 							log.WithFields(log.Fields{
 								"file": httpFh.Name(),
 							}).Error("Error writing to HTTP file")
@@ -434,7 +434,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 
 			// Write row in host CSV file
 			// [host, rtt, port, server_name, synStart, synEnd, scanEnd, protocol, cipher, result, verify_err_no, verify_code, server_version, depth, depth_verbose, error_data]
-			if ok := hostCsv.Write([]string{ip, "", port, tlsRes.serverName, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), scanEndStr, protocol, cipher, resultString, "", "", "", "", "", handshakeError.Error()}); ok != nil {
+			if ok := hostCsv.Write([]string{ip, "", port, h.domain, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), scanEndStr, protocol, cipher, resultString, "", "", "", "", "", handshakeError.Error()}); ok != nil {
 				log.WithFields(log.Fields{
 					"file": hostFh.Name(),
 				}).Error("Error writing to host file")
