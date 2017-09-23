@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -50,13 +51,15 @@ func NewTLSScanner(httpHeaders string, httpRequests []string, doSCSV bool) TLSSc
 	return TLSScanner{make(chan *Target, 10000), make(chan *Target), doHTTP, headerList, httpRequests, doSCSV}
 }
 
-func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, scsv bool) (*tls.Conn, error) {
+func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, scsv bool, clientSessionCache tls.ClientSessionCache) (*tls.Conn, error) {
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		// Use SNI if domain name is available
 		ServerName: serverName,
 		MaxVersion: maxVersion,
+		// Use cache to speed up resumption for multiple HTTP requests
+		ClientSessionCache: clientSessionCache,
 	}
 	if scsv {
 		tlsConfig.CipherSuites = scsvCiphers
@@ -74,7 +77,8 @@ func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion
 func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Duration, synStart time.Time, synEnd time.Time) {
 
 	serverName := (*host).Domains()[0]
-	tlsConn, err := scanTLS(conn, serverName, timeout, 0, false)
+	cache := tls.NewLRUClientSessionCache(1)
+	tlsConn, err := scanTLS(conn, serverName, timeout, 0, false, cache)
 
 	if err != nil {
 		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), err})
@@ -85,12 +89,21 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 
 			for _, req := range s.HTTPRequests {
 				var httpCode int
+				var httpHeaders http.Header
 				var headersStr string
+				var err error
 
 				reqSplit := strings.SplitN(req, ",", 2)
 				method, path := reqSplit[0], reqSplit[1]
 
-				httpCode, httpHeaders, err := getHTTPHeaders(tlsConn, serverName, method, path)
+				httpCode, httpHeaders, err = getHTTPHeaders(tlsConn, serverName, method, path)
+
+				// Establish new TCP connection and try to resume the TLS connection
+				if err == io.ErrUnexpectedEOF {
+					conn, _, _, err = reconnect(conn, timeout)
+					tlsConn, err = scanTLS(conn, serverName, timeout, 0, false, cache)
+					httpCode, httpHeaders, err = getHTTPHeaders(tlsConn, serverName, method, path)
+				}
 
 				for _, key := range s.HTTPHeaders {
 					value := httpHeaders.Get(key)
@@ -106,36 +119,43 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 		}
 
 		if s.doSCSV {
-
-			localAddr, _, _ := net.SplitHostPort(conn.LocalAddr().String())
-			ip := conn.RemoteAddr().String()
 			version := tlsConn.ConnectionState().Version
-			// Close previous connection
-			conn.Close()
+			conn, synStart, synEnd, err := reconnect(conn, timeout)
 
-			synStart := time.Now().UTC()
-			dialer := net.Dialer{Timeout: timeout, LocalAddr: &net.TCPAddr{IP: net.ParseIP(localAddr)}}
-			synEnd := time.Now().UTC()
-
-			conn, err = dialer.Dial("tcp", ip)
 			if err != nil {
-				(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{0, 0, err}})
+				(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{0, 0, err}})
 			} else {
 
 				// Use SCSV pseudo cipher with decreased TLS version
-				tlsConn, err = scanTLS(conn, serverName, timeout, version-1, true)
+				tlsConn, err = scanTLS(conn, serverName, timeout, version-1, true, nil)
 
 				if err != nil {
 					// This is what should happen according to RFC 7507
-					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{0, 0, err}})
+					(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{0, 0, err}})
 				} else {
-					(*host).AddResult(ip, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
+					(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
 				}
 
 				conn.Close()
 			}
 		}
 	}
+}
+
+// reconnect reestablishes the TCP connection
+func reconnect(conn net.Conn, timeout time.Duration) (net.Conn, time.Time, time.Time, error) {
+	localAddr, _, _ := net.SplitHostPort(conn.LocalAddr().String())
+	ip := conn.RemoteAddr().String()
+	// Close previous connection
+	conn.Close()
+
+	synStart := time.Now().UTC()
+	dialer := net.Dialer{Timeout: timeout, LocalAddr: &net.TCPAddr{IP: net.ParseIP(localAddr)}}
+	synEnd := time.Now().UTC()
+
+	conn, err := dialer.Dial("tcp", ip)
+
+	return conn, synStart, synEnd, err
 }
 
 // getHTTPHeaders sends a HTTP request and returns HTTP headers
