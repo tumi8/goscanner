@@ -79,6 +79,7 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 	if err != nil {
 		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), err})
 	} else {
+		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
 
 		if s.doHTTP {
 
@@ -103,8 +104,6 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 				(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), HTTPResult{method, path, httpCode, headersStr, err}})
 			}
 		}
-		// Add TLS certs to result
-		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
 
 		if s.doSCSV {
 
