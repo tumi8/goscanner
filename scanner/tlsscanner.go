@@ -76,14 +76,19 @@ func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion
 // ScanProtocol performs the actual TLS scan and adds results to the target
 func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Duration, synStart time.Time, synEnd time.Time) {
 
+	remoteAddr := conn.RemoteAddr().String()
+
 	serverName := (*host).Domains()[0]
 	cache := tls.NewLRUClientSessionCache(1)
 	tlsConn, err := scanTLS(conn, serverName, timeout, 0, false, cache)
 
 	if err != nil {
-		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), err})
+		(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Now().UTC(), err})
 	} else {
-		(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, err}})
+
+		tlsVersion := tlsConn.ConnectionState().Version
+
+		(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Now().UTC(), TLSResult{tlsConn.ConnectionState().PeerCertificates, tlsVersion, tlsConn.ConnectionState().CipherSuite, err}})
 
 		if s.doHTTP {
 
@@ -101,8 +106,10 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 				// Establish new TCP connection and try to resume the TLS connection
 				if err == io.ErrUnexpectedEOF {
 					conn, _, _, err = reconnect(conn, timeout)
-					tlsConn, err = scanTLS(conn, serverName, timeout, 0, false, cache)
-					httpCode, httpHeaders, err = getHTTPHeaders(tlsConn, serverName, method, path)
+					if err == nil {
+						tlsConn, err = scanTLS(conn, serverName, timeout, 0, false, cache)
+						httpCode, httpHeaders, err = getHTTPHeaders(tlsConn, serverName, method, path)
+					}
 				}
 
 				for _, key := range s.HTTPHeaders {
@@ -114,26 +121,25 @@ func (s TLSScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 				headersStr = strings.TrimRight(headersStr, "\n")
 
 				// Add HTTP result
-				(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), HTTPResult{method, path, httpCode, headersStr, err}})
+				(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Now().UTC(), HTTPResult{method, path, httpCode, headersStr, err}})
 			}
 		}
 
 		if s.doSCSV {
-			version := tlsConn.ConnectionState().Version
 			conn, synStart, synEnd, err := reconnect(conn, timeout)
 
 			if err != nil {
-				(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{0, 0, err}})
+				(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Time{}, SCSVResult{0, 0, err}})
 			} else {
 
 				// Use SCSV pseudo cipher with decreased TLS version
-				tlsConn, err = scanTLS(conn, serverName, timeout, version-1, true, nil)
+				tlsConn, err = scanTLS(conn, serverName, timeout, tlsVersion-1, true, nil)
 
 				if err != nil {
 					// This is what should happen according to RFC 7507
-					(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{0, 0, err}})
+					(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{0, 0, err}})
 				} else {
-					(*host).AddResult(conn.RemoteAddr().String(), &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
+					(*host).AddResult(remoteAddr, &ScanResult{synStart, synEnd, time.Now().UTC(), SCSVResult{tlsConn.ConnectionState().Version, tlsConn.ConnectionState().CipherSuite, errors.New("")}})
 				}
 
 				conn.Close()
