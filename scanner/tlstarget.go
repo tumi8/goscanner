@@ -252,7 +252,8 @@ func NewCertHostTLSTarget(input string) Target {
 	split := strings.Split(input, ",")
 	h.ip = split[0]
 	if len(split) == 2 {
-		h.domain = split[1]
+		// Make sure to remove trailing dots in domain names: google.com. -> google.com
+		h.domain = strings.TrimRight(split[1], ".")
 	} else if len(split) > 2 {
 		log.WithFields(log.Fields{
 			"input": input,
