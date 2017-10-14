@@ -215,10 +215,11 @@ type TLSCertHostProcessor struct {
 	certCache    map[string]bool
 	cipherSuites map[uint16]string
 	skipErrors   bool
+	cacheFunc    func([]byte) []byte
 }
 
 // NewTLSCertHostProcessor returns a new processor for results of scanned TLS hosts
-func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool) ResultProcessor {
+func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool, sha1Cache bool) ResultProcessor {
 	t := TLSCertHostProcessor{}
 
 	// Host file
@@ -301,6 +302,12 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 
 	t.skipErrors = skipErrors
 
+	if sha1Cache {
+		t.cacheFunc = getSHA1
+	} else {
+		t.cacheFunc = getSHA256
+	}
+
 	return t
 }
 
@@ -350,7 +357,7 @@ func (t TLSCertHostProcessor) ProcessResult(hIn *Target) {
 		log.Fatal("Error did not pass CertHostTLSTarget to ProcessResult()")
 	}
 	// Dump certificates
-	err := h.Dump(t.hostFh, t.certFh, t.chrFh, t.scsvFh, t.httpFh, t.timeDiff, t.certCache, t.cipherSuites, t.skipErrors)
+	err := h.Dump(t.hostFh, t.certFh, t.chrFh, t.scsvFh, t.httpFh, t.timeDiff, t.certCache, t.cipherSuites, t.skipErrors, t.cacheFunc)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"host file":                          t.hostFh.Name(),

@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"crypto/sha1"
 	"crypto/sha256"
 	"strconv"
 	"strings"
@@ -9,6 +10,12 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/bt51/ntpclient"
 )
+
+// getSHA1 returns the SHA1 hash of a string
+func getSHA1(input []byte) []byte {
+	hash := sha1.Sum(input)
+	return hash[:]
+}
 
 // getSHA256 returns the SHA-256 hash of a string
 func getSHA256(input []byte) []byte {

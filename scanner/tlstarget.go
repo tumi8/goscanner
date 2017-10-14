@@ -290,7 +290,7 @@ func (h *CertHostTLSTarget) AddResult(address string, res *ScanResult) {
 }
 
 // Dump writes the retrieved certificates to a csv file
-func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File, timediff time.Duration, certCache map[string]bool, cipherSuites map[uint16]string, skipErrors bool) error {
+func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File, timediff time.Duration, certCache map[string]bool, cipherSuites map[uint16]string, skipErrors bool, cacheFunc func([]byte) []byte) error {
 
 	// Create CSV file instances
 	hostCsv := csv.NewWriter(hostFh)
@@ -401,7 +401,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 			}
 
 			for i, cert := range tlsRes.certificates {
-				hashBytes := getSHA256(cert.Raw)
+				hashBytes := cacheFunc(cert.Raw)
 				hashHex := hex.EncodeToString(hashBytes)
 
 				// Check if certificate was already written out before
