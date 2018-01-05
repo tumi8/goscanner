@@ -11,4 +11,4 @@ goget:
 scanner/asset/assets.go:
 	go generate
 
-all : goscanner scanner/asset/assets.go goget
+all : git-version scanner/asset/assets.go goget goscanner
