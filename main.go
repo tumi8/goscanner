@@ -191,7 +191,7 @@ func main() {
 				}).Fatal(err)
 			}
 
-			scanner.Processor{proc, s.OutputChannel()}.Process()
+			scanner.Processor{ResultProcessor: proc, OutputChan: s.OutputChannel()}.Process()
 		}
 	} else {
 		// Create scanner and start scanning
@@ -241,14 +241,14 @@ func main() {
 		}
 
 		// Process results
-		scanner.Processor{proc, s.OutputChannel()}.Process()
+		scanner.Processor{ResultProcessor: proc, OutputChan: s.OutputChannel()}.Process()
 	}
 }
 
 // startSSHScanner creates a SSHScanner, starts the scanning routine and returns the scanner
 func startSSHScanner(addr *net.TCPAddr) scanner.Scanner {
 	// Create scanner and start scanning
-	s := scanner.Scanner{scanner.NewSSHScanner(), opts.Concurrency, opts.QPS, time.Duration(opts.Timeout) * time.Millisecond, time.Duration(opts.SynTimeout) * time.Millisecond, addr, opts.Input}
+	s := scanner.Scanner{ProtocolScanner: scanner.NewSSHScanner(), NumRoutines: opts.Concurrency, QPS: opts.QPS, ConnTimeout: time.Duration(opts.Timeout) * time.Millisecond, SynTimeout: time.Duration(opts.SynTimeout) * time.Millisecond, SourceIP: addr, InputFile: opts.Input}
 	s.Scan()
 	return s
 }
@@ -256,7 +256,7 @@ func startSSHScanner(addr *net.TCPAddr) scanner.Scanner {
 // startTLSScanner creates a TLSScanner, starts the scanning routine and returns the scanner
 func startTLSScanner(addr *net.TCPAddr) scanner.Scanner {
 	// Create scanner and start scanning
-	s := scanner.Scanner{scanner.NewTLSScanner(opts.HTTPHeaders, opts.HTTPRequests, opts.SCSV), opts.Concurrency, opts.QPS, time.Duration(opts.Timeout) * time.Millisecond, time.Duration(opts.SynTimeout) * time.Millisecond, addr, opts.Input}
+	s := scanner.Scanner{ProtocolScanner: scanner.NewTLSScanner(opts.HTTPHeaders, opts.HTTPRequests, opts.SCSV), NumRoutines: opts.Concurrency, QPS: opts.QPS, ConnTimeout: time.Duration(opts.Timeout) * time.Millisecond, SynTimeout: time.Duration(opts.SynTimeout) * time.Millisecond, SourceIP: addr, InputFile: opts.Input}
 	s.Scan()
 	return s
 }
