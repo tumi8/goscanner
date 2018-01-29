@@ -7,4 +7,7 @@ go:
   - 1.x
   - master
 
-script: make all
+before_install:
+  - go get golang.org/x/tools/cmd/goimports
+
+script: make all && go tool vet . && goimports -l . | grep -v assets | wc -l | grep '0$' && go fix
