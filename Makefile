@@ -8,7 +8,7 @@ git-version:
 goget:
 	go get -f -u
 
-scanner/asset/assets.go:
+scanner/asset/assets.go: git-version
 	go generate
 
 all : git-version scanner/asset/assets.go goget goscanner
