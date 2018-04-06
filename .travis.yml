@@ -7,6 +7,11 @@ go:
   - 1.x
   - master
 
+matrix:
+  allow_failures:
+  - go: master
+  fast_finish: true
+
 before_install:
   - go get golang.org/x/tools/cmd/goimports
 
