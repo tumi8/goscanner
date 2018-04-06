@@ -401,27 +401,28 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 			}
 
 			for i, cert := range tlsRes.certificates {
-				hashBytes := cacheFunc(cert.Raw)
-				hashHex := hex.EncodeToString(hashBytes)
+				cacheBytes := cacheFunc(cert.Raw)
+				// Always write out SHA256, irrespective of cache function
+				sha256Hex := hex.EncodeToString(getSHA256(cert.Raw))
 
 				// Check if certificate was already written out before
 				// Use byte string as map key to save memory (slices can not be used as map key)
-				if !certCache[string(hashBytes)] {
+				if !certCache[string(cacheBytes)] {
 					// Write row in cert CSV file
 					// [cert, cert_hash]
 					certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
-					if ok := certCsv.Write([]string{certString, hashHex}); ok != nil {
+					if ok := certCsv.Write([]string{certString, sha256Hex}); ok != nil {
 						log.WithFields(log.Fields{
 							"file": certFh.Name(),
 						}).Error("Error writing to certificate file")
 					} else {
-						certCache[string(hashBytes)] = true
+						certCache[string(cacheBytes)] = true
 					}
 				}
 
 				// Write to certificate-host relation CSV file
 				// [cert_hash, host, port, depth]
-				if ok := chrCsv.Write([]string{hashHex, ip, port, h.domain, strconv.Itoa(i)}); ok != nil {
+				if ok := chrCsv.Write([]string{sha256Hex, ip, port, h.domain, strconv.Itoa(i)}); ok != nil {
 					log.WithFields(log.Fields{
 						"file": chrFh.Name(),
 					}).Error("Error writing to host-certificate-relationship file")
