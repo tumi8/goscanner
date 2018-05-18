@@ -4,6 +4,7 @@ sudo: false
 go:
   # logrus includes golang.org/x/sys/unix/affinity_linux.go which requires go 1.9
   - 1.9
+  - 1.10
   - 1.x
   - master
 
