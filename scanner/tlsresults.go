@@ -11,6 +11,13 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
+const (
+	// Hash cache enum
+	HashCacheSHA256 = 1
+	HashCacheSHA1   = 2
+	HashCacheNone   = 3
+)
+
 // beginPublicKey and endPublicKey signal start and beginning of PEM-encoded TLS public keys
 const beginPublicKey = "-----BEGIN PUBLIC KEY-----"
 const endPublicKey = "-----END PUBLIC KEY-----"
@@ -219,7 +226,7 @@ type TLSCertHostProcessor struct {
 }
 
 // NewTLSCertHostProcessor returns a new processor for results of scanned TLS hosts
-func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool, sha1Cache bool) ResultProcessor {
+func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool, hashCache int) ResultProcessor {
 	t := TLSCertHostProcessor{}
 
 	// Host file
@@ -302,10 +309,12 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 
 	t.skipErrors = skipErrors
 
-	if sha1Cache {
+	if hashCache == HashCacheSHA1 {
 		t.cacheFunc = getSHA1
-	} else {
+	} else if hashCache == HashCacheSHA256 {
 		t.cacheFunc = getSHA256
+	} else if hashCache == HashCacheNone {
+		t.cacheFunc = nil
 	}
 
 	return t
