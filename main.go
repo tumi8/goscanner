@@ -26,7 +26,7 @@ var opts struct {
 	DumpDir       string `short:"s" long:"dump" description:"Output directory for certificate dump" value-name:"DUMP-DIR"`
 	DatabaseTable string `short:"d" long:"db-table" description:"Table name for PostgreSQL database" default:"simplehashes"`
 	LogFile       string `short:"l" long:"log-file" description:"Log to file LOG-FILE (JSON formatted) instead of stderr" value-name:"LOG-FILE"`
-	SHA1Cache     bool   `long:"sha1-cache" description:"Use SHA-1 instead of SHA-256 in the certificate cache to save RAM"`
+	HashCache     string `long:"hash-cache" description:"Change hash chache algorithm to save RAM. With 'none' output certs will not be deduplicated" choice:"sha1" choice:"sha256" choice:"none" default:"sha256"`
 
 	Concurrency int   `short:"c" long:"concurrency" description:"Number of concurrent scanning goroutines. By default it is (qps/1000)*(timeout + syn-timeout)" default:"0"`
 	QPS         int   `short:"q" long:"qps" description:"Number of queries per second" default:"100"`
@@ -237,7 +237,14 @@ func main() {
 				fileHttp = ""
 			}
 
-			proc = scanner.NewTLSCertHostProcessor(fileCerts, fileHosts, fileCertHostRel, fileScsv, fileHttp, opts.SkipErrors, opts.SHA1Cache)
+			hashCache := scanner.HashCacheSHA256
+			if opts.HashCache == "sha1" {
+				hashCache = scanner.HashCacheSHA1
+			} else if opts.HashCache == "none" {
+				hashCache = scanner.HashCacheNone
+			}
+
+			proc = scanner.NewTLSCertHostProcessor(fileCerts, fileHosts, fileCertHostRel, fileScsv, fileHttp, opts.SkipErrors, hashCache)
 		}
 
 		// Process results

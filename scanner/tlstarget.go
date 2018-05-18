@@ -401,13 +401,27 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 			}
 
 			for i, cert := range tlsRes.certificates {
-				cacheBytes := cacheFunc(cert.Raw)
 				// Always write out SHA256, irrespective of cache function
 				sha256Hex := hex.EncodeToString(getSHA256(cert.Raw))
 
-				// Check if certificate was already written out before
-				// Use byte string as map key to save memory (slices can not be used as map key)
-				if !certCache[string(cacheBytes)] {
+				if cacheFunc != nil {
+					cacheBytes := cacheFunc(cert.Raw)
+
+					// Check if certificate was already written out before
+					// Use byte string as map key to save memory (slices can not be used as map key)
+					if !certCache[string(cacheBytes)] {
+						// Write row in cert CSV file
+						// [cert, cert_hash]
+						certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
+						if ok := certCsv.Write([]string{certString, sha256Hex}); ok != nil {
+							log.WithFields(log.Fields{
+								"file": certFh.Name(),
+							}).Error("Error writing to certificate file")
+						} else {
+							certCache[string(cacheBytes)] = true
+						}
+					}
+				} else {
 					// Write row in cert CSV file
 					// [cert, cert_hash]
 					certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
@@ -415,8 +429,6 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 						log.WithFields(log.Fields{
 							"file": certFh.Name(),
 						}).Error("Error writing to certificate file")
-					} else {
-						certCache[string(cacheBytes)] = true
 					}
 				}
 
