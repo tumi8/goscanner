@@ -1,19 +1,35 @@
 language: go
 sudo: false
 
-go:
-  # logrus includes golang.org/x/sys/unix/affinity_linux.go which requires go 1.9
-  - "1.9"
-  - "1.10"
-  - "1.x"
-  - "master"
+env:
+  global:
+    - GOVET="go vet"
+    - GOIMPORTS="goimports"
 
 matrix:
+  include:
+    # logrus includes golang.org/x/sys/unix/affinity_linux.go which requires go 1.9
+    # goimports seems to work differently before go 1.11 -> ignore results
+    - go: "1.9"
+      env:
+        - GOVET="go tool vet"
+        - GOIMPORTS="true"
+    - go: "1.10"
+      env:
+        - GOVET="go tool vet"
+        - GOIMPORTS="true"
+    - go: "1.11"
+      env:
+        - GOVET="go tool vet"
+    - go: "1.12"
+    - go: "1.x"
+    - go: "master"
   allow_failures:
-  - go: "master"
+    - go: "master"
   fast_finish: true
 
 before_install:
   - go get golang.org/x/tools/cmd/goimports
 
-script: make all && go tool vet . && goimports -l . | grep -v assets | wc -l | grep '0$' && go fix
+script:
+    - make all && $GOVET . && $GOIMPORTS -l . | grep -v assets | wc -l | grep '0$' && go fix
