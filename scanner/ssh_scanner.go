@@ -82,7 +82,7 @@ func (s SSHScanner) ScanProtocol(conn net.Conn, host *Target, timeout time.Durat
 			compressionsServerClient: serverInfo.ServerInit.CompressionServerClient,
 			languagesClientServer:    serverInfo.ServerInit.LanguagesClientServer,
 			languagesServerClient:    serverInfo.ServerInit.LanguagesServerClient,
-			err: nil,
+			err:                      nil,
 		}
 
 		if serverInfo.Key != nil {
