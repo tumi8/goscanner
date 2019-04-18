@@ -340,6 +340,6 @@ func getFiles(inputDir, outputDir, scannedDir string) ([]string, []string, []str
 
 // Download and update the tls-parameters-4.csv asset file
 //go:generate wget -q -O tls-parameters-4.csv http://www.iana.org/assignments/tls-parameters/tls-parameters-4.csv
-//go:generate go get -u github.com/jteeuwen/go-bindata/...
+//go:generate go get -u github.com/tmthrgd/go-bindata/...
 //go:generate go-bindata -pkg asset -o scanner/asset/assets.go tls-parameters-4.csv git-version
 //go:generate rm tls-parameters-4.csv
