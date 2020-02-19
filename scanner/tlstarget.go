@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // beginCertificate and endCertificate signal start and beginning of PEM-encoded TLS certificates
