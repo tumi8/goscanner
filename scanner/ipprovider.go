@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // IPProvider is an instance of the LCG-based IP address generator
