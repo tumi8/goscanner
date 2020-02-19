@@ -219,7 +219,7 @@ type TLSCertHostProcessor struct {
 	scsvFh       *os.File
 	httpFh       *os.File
 	timeDiff     time.Duration
-	certCache    map[string]bool
+	certCache    map[string]map[string]struct{}
 	cipherSuites map[uint16]string
 	skipErrors   bool
 	cacheFunc    func([]byte) []byte
@@ -300,7 +300,7 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 	}
 
 	// Cache for already exported certificates
-	t.certCache = make(map[string]bool)
+	t.certCache = make(map[string]map[string]struct{})
 
 	t.timeDiff = getNtpLocalTimeDiff()
 
