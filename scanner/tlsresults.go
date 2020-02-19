@@ -300,7 +300,7 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 	}
 
 	// Cache for already exported certificates
-	t.certCache = make(map[string]map[string]struct{})
+	t.certCache = make(map[string]map[string]struct{}, 256)
 
 	t.timeDiff = getNtpLocalTimeDiff()
 
