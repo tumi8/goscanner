@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/tumi8/goscanner/scanner/asset"
 	"github.com/tumi8/tls"
 )
