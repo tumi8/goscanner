@@ -414,7 +414,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 					if !ok {
 						certCache[cacheBytes[:1]] = make(map[string]struct{})
 					}
-					if _, ok := certCache[cacheBytes[:1]][cacheBytes]; !ok {
+					if _, ok := certCache[cacheBytes[:1]][cacheBytes[1:]]; !ok {
 						// Write row in cert CSV file
 						// [cert, cert_hash]
 						certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
@@ -423,7 +423,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 								"file": certFh.Name(),
 							}).Error("Error writing to certificate file")
 						} else {
-							certCache[cacheBytes[:1]][cacheBytes] = struct{}{}
+							certCache[cacheBytes[:1]][cacheBytes[1:]] = struct{}{}
 						}
 					}
 				} else {
