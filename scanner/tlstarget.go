@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"net"
 	"os"
@@ -438,8 +439,20 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				}
 
 				// Write to certificate-host relation CSV file
-				// [cert_hash, host, port, depth]
-				if ok := chrCsv.Write([]string{sha256Hex, ip, port, h.domain, strconv.Itoa(i)}); ok != nil {
+				// [cert_hash, pub_key_hash, host, port, depth]
+				publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+				if err != nil {
+					panic(err)
+				}
+
+				publicKeyBlock := pem.Block{
+					Type:  "PUBLIC KEY",
+					Bytes: publicKeyDer,
+				}
+
+				sha1PubKey := hex.EncodeToString(getSHA1(pem.EncodeToMemory(&publicKeyBlock)))
+
+				if ok := chrCsv.Write([]string{sha256Hex, sha1PubKey, ip, port, h.domain, strconv.Itoa(i)}); ok != nil {
 					log.WithFields(log.Fields{
 						"file": chrFh.Name(),
 					}).Error("Error writing to host-certificate-relationship file")
