@@ -444,8 +444,8 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				var sha1PubKey string
 				if err != nil {
 					log.WithFields(log.Fields{
-						"ip": ip,
-						"cert_hash": sha256Hex,
+						"cert_hash":   sha256Hex,
+						"ip":          ip,
 						"server_name": h.domain,
 					}).Error("Could not parse public key")
 					sha1PubKey = ""
