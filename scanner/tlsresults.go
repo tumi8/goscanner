@@ -7,7 +7,7 @@ import (
 	"errors"
 	"os"
 	"time"
-
+    "github.com/syndtr/goleveldb/leveldb"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -219,14 +219,14 @@ type TLSCertHostProcessor struct {
 	scsvFh       *os.File
 	httpFh       *os.File
 	timeDiff     time.Duration
-	certCache    map[string]map[string]struct{}
+	certCache    scanCache
 	cipherSuites map[uint16]string
 	skipErrors   bool
 	cacheFunc    func([]byte) []byte
 }
 
 // NewTLSCertHostProcessor returns a new processor for results of scanned TLS hosts
-func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool, hashCache int) ResultProcessor {
+func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile string, skipErrors bool, hashCache int, diskCacheDir string) ResultProcessor {
 	t := TLSCertHostProcessor{}
 
 	// Host file
@@ -300,7 +300,16 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 	}
 
 	// Cache for already exported certificates
-	t.certCache = make(map[string]map[string]struct{}, 256)
+
+	if diskCacheDir == "" {
+		t.certCache = simpleMapCache{mapCache: make(map[string]map[string]struct{}, 256)}
+	} else {
+		db, err := leveldb.OpenFile(diskCacheDir, nil)
+		t.certCache = levelDbCache{db: db, dbPath: diskCacheDir}
+		if err != nil {
+			log.Fatal("Could not create leveldb database at path " + diskCacheDir, err)
+		}
+	}
 
 	t.timeDiff = getNtpLocalTimeDiff()
 
@@ -355,6 +364,9 @@ func (t TLSCertHostProcessor) Finish() {
 				"file": t.httpFh.Name(),
 			}).Error("Error closing HTTP file")
 		}
+	}
+	if t.certCache != nil {
+		t.certCache.finish()
 	}
 }
 

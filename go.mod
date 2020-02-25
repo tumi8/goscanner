@@ -10,7 +10,8 @@ require (
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/sirupsen/logrus v1.4.2
-	github.com/tmthrgd/go-bindata v0.0.0-20190904063317-a4b65675e0fb // indirect
+	github.com/syndtr/goleveldb v1.0.0
+	github.com/tmthrgd/go-bindata v0.0.0-20190904063317-a4b65675e0fb
 	github.com/tumi8/ssh v0.0.0-20170913080928-6e772825dc10
 	github.com/tumi8/tls v0.0.0-20200219164119-c9288c80925c
 	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d // indirect
