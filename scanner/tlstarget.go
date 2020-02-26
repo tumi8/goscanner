@@ -401,9 +401,26 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				continue
 			}
 
+
+			certHashes := make([]string, 0, len(tlsRes.certificates))
+			leafPubKeyHash := ""
+			leafCertHash := ""
 			for i, cert := range tlsRes.certificates {
 				// Always write out SHA256, irrespective of cache function
 				sha256Hex := hex.EncodeToString(getSHA256(cert.Raw))
+				certHashes = append(certHashes, sha256Hex)
+
+				if i == 0 {
+					leafCertHash = sha256Hex
+					leafPubKeyHash, err = getPubKeyHash(cert)
+					if err != nil {
+						log.WithFields(log.Fields{
+							"cert_hash":   sha256Hex,
+							"ip":          ip,
+							"server_name": h.domain,
+						}).Error("Could not parse public key")
+					}
+				}
 
 				if cacheFunc != nil {
 					// Check if certificate was already written out before
@@ -438,30 +455,18 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 					}
 				}
 
-				// Write to certificate-host relation CSV file
-				// [cert_hash, pub_key_hash, host, port, depth]
-				publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
-				var sha2PubKey string
-				if err != nil {
-					log.WithFields(log.Fields{
-						"cert_hash":   sha256Hex,
-						"ip":          ip,
-						"server_name": h.domain,
-					}).Error("Could not parse public key")
-					sha2PubKey = ""
-				} else {
-					publicKeyBlock := pem.Block{
-						Type:  "PUBLIC KEY",
-						Bytes: publicKeyDer,
+			}
+			// Write to certificate-host relation CSV file
+			// All relations must be written as we cannot cache the relations, they may be duplicate
+			// [cert_hash, parent_cert_hash]
+
+			if len(certHashes) > 1 {
+				for i, hash := range certHashes[:len(certHashes) - 2] {
+					if ok := chrCsv.Write([]string{hash, certHashes[i + 1]}); ok != nil {
+						log.WithFields(log.Fields{
+							"file": chrFh.Name(),
+						}).Error("Error writing to host-certificate-relationship file")
 					}
-
-					sha2PubKey = hex.EncodeToString(getSHA256(pem.EncodeToMemory(&publicKeyBlock)))
-				}
-
-				if ok := chrCsv.Write([]string{sha256Hex, ip, port, h.domain, strconv.Itoa(i), sha2PubKey}); ok != nil {
-					log.WithFields(log.Fields{
-						"file": chrFh.Name(),
-					}).Error("Error writing to host-certificate-relationship file")
 				}
 			}
 
@@ -471,8 +476,8 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 			}
 
 			// Write row in host CSV file
-			// [host, rtt, port, server_name, synStart, synEnd, scanEnd, protocol, cipher, result, verify_err_no, verify_code, server_version, depth, depth_verbose, error_data]
-			if ok := hostCsv.Write([]string{ip, "", port, h.domain, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), scanEndStr, protocol, cipher, resultString, "", "", "", "", "", handshakeError.Error()}); ok != nil {
+			// [host, rtt, port, server_name, synStart, synEnd, scanEnd, protocol, cipher, result, verify_err_no, verify_code, server_version, depth, depth_verbose, error_data, cert_hash, pub_key_hash]
+			if ok := hostCsv.Write([]string{ip, "", port, h.domain, strconv.FormatInt(res.synStart.Add(timediff).Unix(), 10), strconv.FormatInt(res.synEnd.Add(timediff).Unix(), 10), scanEndStr, protocol, cipher, resultString, "", "", "", "", "", handshakeError.Error(), leafCertHash, leafPubKeyHash}); ok != nil {
 				log.WithFields(log.Fields{
 					"file": hostFh.Name(),
 				}).Error("Error writing to host file")
@@ -482,6 +487,20 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 
 	// No error encountered
 	return nil
+}
+
+func getPubKeyHash(cert *x509.Certificate) (string, error) {
+	publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	publicKeyBlock := pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyDer,
+	}
+
+	return hex.EncodeToString(getSHA256(pem.EncodeToMemory(&publicKeyBlock))), nil
 }
 
 // handshakeErrorLookup returns a string for a certain handshake error
