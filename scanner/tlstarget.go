@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
 	"net"
 	"os"
