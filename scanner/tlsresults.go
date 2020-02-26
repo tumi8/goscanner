@@ -26,7 +26,7 @@ const endPublicKey = "-----END PUBLIC KEY-----"
 var hostCsvHeader = []string{"host", "rtt", "port", "server_name", "synStart", "synEnd", "scanEnd", "protocol", "cipher", "resultString", "verify_err_no", "verify_code", "server_version", "depth", "depth_verbose", "error_data"}
 
 // chrCsvHeader represents the header line of the cert_host_rel.csv file
-var chrCsvHeader = []string{"cert_hash", "pub_key_hash", "host", "port", "server_name", "depth"}
+var chrCsvHeader = []string{"cert_hash", "host", "port", "server_name", "depth", "pub_key_hash"}
 
 // certCsvHeader represents the header line of the certs.csv file
 var certCsvHeader = []string{"cert", "cert_hash"}
