@@ -290,7 +290,7 @@ func (h *CertHostTLSTarget) AddResult(address string, res *ScanResult) {
 }
 
 // Dump writes the retrieved certificates to a csv file
-func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File, timediff time.Duration, certCache map[string]bool, cipherSuites map[uint16]string, skipErrors bool, cacheFunc func([]byte) []byte) error {
+func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File, timediff time.Duration, certCache map[string]map[string]struct{}, cipherSuites map[uint16]string, skipErrors bool, cacheFunc func([]byte) []byte) error {
 
 	// Create CSV file instances
 	hostCsv := csv.NewWriter(hostFh)
@@ -405,11 +405,16 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				sha256Hex := hex.EncodeToString(getSHA256(cert.Raw))
 
 				if cacheFunc != nil {
-					cacheBytes := cacheFunc(cert.Raw)
-
 					// Check if certificate was already written out before
 					// Use byte string as map key to save memory (slices can not be used as map key)
-					if !certCache[string(cacheBytes)] {
+					cacheBytes := string(cacheFunc(cert.Raw))
+
+					_, ok := certCache[cacheBytes[:1]]
+
+					if !ok {
+						certCache[cacheBytes[:1]] = make(map[string]struct{})
+					}
+					if _, ok := certCache[cacheBytes[:1]][cacheBytes[1:]]; !ok {
 						// Write row in cert CSV file
 						// [cert, cert_hash]
 						certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
@@ -418,7 +423,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 								"file": certFh.Name(),
 							}).Error("Error writing to certificate file")
 						} else {
-							certCache[string(cacheBytes)] = true
+							certCache[cacheBytes[:1]][cacheBytes[1:]] = struct{}{}
 						}
 					}
 				} else {
