@@ -439,24 +439,8 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				}
 
 				// Write to certificate-host relation CSV file
-				// [cert_hash, pub_key_hash, host, port, depth]
-				publicKeyDer, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
-				var sha2PubKey string
-				if err != nil {
-					log.WithFields(log.Fields{
-						"cert_hash":   sha256Hex,
-						"ip":          ip,
-						"server_name": h.domain,
-					}).Error("Could not parse public key")
-					sha2PubKey = ""
-				} else {
-					publicKeyBlock := pem.Block{
-						Type:  "PUBLIC KEY",
-						Bytes: publicKeyDer,
-					}
-
-					sha2PubKey = hex.EncodeToString(getSHA256(pem.EncodeToMemory(&publicKeyBlock)))
-				}
+				// [cert_hash, host, port, depth, pub_key_hash]
+				sha2PubKey := hex.EncodeToString(getSHA256(cert.RawSubjectPublicKeyInfo))
 
 				if ok := chrCsv.Write([]string{sha256Hex, ip, port, h.domain, strconv.Itoa(i), sha2PubKey}); ok != nil {
 					log.WithFields(log.Fields{
