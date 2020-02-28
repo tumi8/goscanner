@@ -401,7 +401,6 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 				continue
 			}
 
-
 			certHashes := make([]string, 0, len(tlsRes.certificates))
 			leafPubKeyHash := ""
 			leafCertHash := ""
@@ -428,7 +427,7 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 
 					cacheBytes := cacheFunc(cert.Raw)
 
-					if ! certCache.contains(cacheBytes) {
+					if !certCache.contains(cacheBytes) {
 						certString := opensslFormat(base64.StdEncoding.EncodeToString(cert.Raw), beginCertificate, endCertificate)
 						if ok := certCsv.Write([]string{certString, sha256Hex}); ok != nil {
 							log.WithFields(log.Fields{
@@ -454,8 +453,8 @@ func (h *CertHostTLSTarget) Dump(hostFh, certFh, chrFh, scsvFh, httpFh *os.File,
 			// [cert_hash, parent_cert_hash]
 
 			if len(certHashes) > 1 {
-				for i, hash := range certHashes[:len(certHashes) - 2] {
-					if ok := chrCsv.Write([]string{hash, certHashes[i + 1]}); ok != nil {
+				for i, hash := range certHashes[:len(certHashes)-2] {
+					if ok := chrCsv.Write([]string{hash, certHashes[i+1]}); ok != nil {
 						log.WithFields(log.Fields{
 							"file": chrFh.Name(),
 						}).Error("Error writing to host-certificate-relationship file")

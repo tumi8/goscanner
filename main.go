@@ -11,6 +11,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"time"
+
 	"github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
 	"github.com/tumi8/goscanner/scanner"
@@ -27,7 +28,7 @@ var opts struct {
 	LogFile       string `short:"l" long:"log-file" description:"Log to file LOG-FILE (JSON formatted) instead of stderr" value-name:"LOG-FILE"`
 	HashCache     string `long:"hash-cache" description:"Change hash cache algorithm to save RAM. With 'none' output certs will not be deduplicated" choice:"sha1" choice:"sha256" choice:"none" default:"sha256"`
 
-	DiskCache     string `long:"cache-dir" description:"Define a temporary directory to use as cache to save RAM"`
+	DiskCache string `long:"cache-dir" description:"Define a temporary directory to use as cache to save RAM"`
 
 	Concurrency int   `short:"c" long:"concurrency" description:"Number of concurrent scanning goroutines. By default it is (qps/1000)*(timeout + syn-timeout)" default:"0"`
 	QPS         int   `short:"q" long:"qps" description:"Number of queries per second" default:"100"`

@@ -5,10 +5,11 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"errors"
-	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/goleveldb/leveldb"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const (
@@ -307,7 +308,7 @@ func NewTLSCertHostProcessor(certfile, hostfile, chrfile, scsvfile, httpfile str
 		db, err := leveldb.OpenFile(diskCacheDir, nil)
 		t.certCache = levelDbCache{db: db, dbPath: diskCacheDir}
 		if err != nil {
-			log.Fatal("Could not create leveldb database at path " + diskCacheDir, err)
+			log.Fatal("Could not create leveldb database at path "+diskCacheDir, err)
 		}
 	}
 

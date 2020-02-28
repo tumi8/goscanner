@@ -1,8 +1,9 @@
 package scanner
 
 import (
-	"github.com/syndtr/goleveldb/leveldb"
 	"os"
+
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type scanCache interface {
@@ -12,7 +13,7 @@ type scanCache interface {
 }
 
 type levelDbCache struct {
-	db *leveldb.DB
+	db     *leveldb.DB
 	dbPath string
 }
 
@@ -48,7 +49,7 @@ func (sm simpleMapCache) put(key []byte) error {
 }
 
 func (l levelDbCache) contains(key []byte) bool {
-	val,_ := l.db.Get(key, nil)
+	val, _ := l.db.Get(key, nil)
 	return val != nil
 }
 
