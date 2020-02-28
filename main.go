@@ -63,7 +63,7 @@ const (
 
 	// files to save TLS scan results
 	fileCerts       = "certs.csv"
-	fileCertHostRel = "cert_host_rel.csv"
+	fileCertHostRel = "cert_rel.csv"
 	fileScsv        = "scsv.csv"
 	fileHttp        = "http.csv"
 )

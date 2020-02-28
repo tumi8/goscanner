@@ -2,3 +2,4 @@
 scanner/asset/*
 git-version
 goscanner
+example-output/*
