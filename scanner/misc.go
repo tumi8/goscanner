@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/bt51/ntpclient"
+	log "github.com/sirupsen/logrus"
 )
 
 // getSHA1 returns the SHA1 hash of a string

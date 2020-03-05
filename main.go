@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/jessevdk/go-flags"
+	log "github.com/sirupsen/logrus"
 	"github.com/tumi8/goscanner/scanner"
 )
 
