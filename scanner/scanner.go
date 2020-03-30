@@ -1,7 +1,11 @@
 package scanner
 
 import (
+	"github.com/tumi8/goscanner/scanner/misc"
+	"github.com/tumi8/goscanner/scanner/results"
+	"github.com/tumi8/goscanner/scanner/scans"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,22 +14,56 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ProtocolScanner is used to implement protocol scanning
-type ProtocolScanner interface {
-	ScanProtocol(conn net.Conn, target *Target, timeout time.Duration, synStart time.Time, synEnd time.Time)
-	InputChannel() chan *Target
-	OutputChannel() chan *Target
+var ALL_SCANS = map[string]Scans {
+	"tls":	&scans.TLSScan{},
+	"http":	&scans.HTTPScan{},
+	"ssh":	&scans.SSHScan{},
+	"scvs": &scans.SCSVScan{},
+}
+
+type Scans interface {
+	Init(opts *misc.Options)
+	GetDefaultPort() int
+	Scan(conn *net.Conn, target *scans.Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) *net.Conn
 }
 
 // Scanner is the base struct that handles the scanning loop
 type Scanner struct {
-	ProtocolScanner
 	NumRoutines int
 	QPS         int
 	ConnTimeout time.Duration
 	SynTimeout  time.Duration
 	SourceIP    *net.TCPAddr
 	InputFile   string
+	scans 		[]Scans
+	Input 		chan *scans.TargetBatch
+	Output 		chan *results.BatchScanResult
+}
+
+func NewScanner(opts *misc.Options, addr *net.TCPAddr, activatedScans []string) Scanner {
+
+	loaded_scans := make([]Scans, len(activatedScans))
+	for i,s := range activatedScans {
+		loaded_scans[i] = ALL_SCANS[s]
+		if loaded_scans[i] == nil {
+			log.Fatal("Could not find scan: " + s)
+		}
+		loaded_scans[i].Init(opts)
+	}
+
+	log.Info("Conducting the following scans in order: " + strings.Join(activatedScans, ", "))
+
+	return Scanner{
+		NumRoutines: opts.Concurrency,
+		QPS:         opts.QPS,
+		ConnTimeout: time.Duration(opts.Timeout) * time.Millisecond,
+		SynTimeout:  time.Duration(opts.SynTimeout) * time.Millisecond,
+		SourceIP:    addr,
+		InputFile:   opts.Input,
+		scans:    	 loaded_scans,
+		Input:		 make(chan *scans.TargetBatch, 10000),
+		Output: 	 make(chan *results.BatchScanResult),
+	}
 }
 
 const statsEverySeconds = 30
@@ -53,10 +91,12 @@ func (s Scanner) Scan() {
 		go func(wgScoped *sync.WaitGroup, limiterScoped *rate.Limiter, effectiveQPSScoped *chan interface{}) {
 			wg.Add(1)
 
-			for target, ok := <-s.InputChannel(); ok; target, ok = <-s.InputChannel() {
+			for batchTarget, ok := <-s.Input; ok; batchTarget, ok = <-s.Input {
+
+				batchResult := results.BatchScanResult{Input: (*batchTarget).Input(), Results: make([]*results.ScanResult, len((*batchTarget).Targets()))}
 
 				// Some targets have multiple IPs
-				for _, ip := range (*target).IPs() {
+				for i, target := range (*batchTarget).Targets() {
 
 					limiter.Wait(ctx)
 					*effectiveQPSScoped <- struct{}{}
@@ -66,22 +106,37 @@ func (s Scanner) Scan() {
 					dialer := net.Dialer{Timeout: s.SynTimeout, LocalAddr: s.SourceIP}
 					synEnd := time.Now().UTC()
 
-					conn, err := dialer.Dial("tcp", ip)
+					address := target.Address(s.scans[0].GetDefaultPort())
+
+					conn, err := dialer.Dial("tcp", address)
+
+					result := results.ScanResult{
+						SubResults: make([]results.ScanSubResult, 0),
+						Ip:     	target.Ip,
+						Domain:		target.Domain,
+						Address:	address,
+					}
+					batchResult.Results[i] = &result
+
 					if err != nil {
-						(*target).AddResult(ip, &ScanResult{synStart, synEnd, time.Time{}, err})
+						result.AddResult(results.ScanSubResult{synStart, synEnd, time.Time{}, &results.TLSResult{Err: err}})
 						continue
 					}
+
 					// Set connection deadline
 					conn.SetDeadline(time.Now().Add(s.ConnTimeout))
 
-					// Do the actual protocol scan, results will be set within this method
-					s.ScanProtocol(conn, target, s.ConnTimeout, synStart, synEnd)
+					for _, scan := range s.scans {
+						conn = *scan.Scan(&conn, &target, &result, s.ConnTimeout, synStart, synEnd)
+					}
 
 					// Close the connection
 					conn.Close()
+
+					// Send target with results to channel
+					batchResult.Results[i] = &result
 				}
-				// Send target with results to channel
-				s.OutputChannel() <- target
+				s.Output <- &batchResult
 			}
 
 			wg.Done()
@@ -90,7 +145,7 @@ func (s Scanner) Scan() {
 
 	go func() {
 		// Close channel when scanning is finished
-		defer close(s.OutputChannel())
+		defer close(s.Output)
 		wg.Wait()
 
 		log.Info("Scanning stopped")
