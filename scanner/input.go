@@ -3,20 +3,19 @@ package scanner
 import (
 	"bufio"
 	"bytes"
-	"encoding/csv"
+	"github.com/tumi8/goscanner/scanner/misc"
+	"github.com/tumi8/goscanner/scanner/scans"
 	"io"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/tumi8/goscanner/scanner/asset"
-	"github.com/tumi8/tls"
 )
 
 // ReadIPsFromTxt reads IP addresses separated by newlines from an input file and sends them to the channel
-func ReadIPsFromTxt(filename string, targetChan chan *Target, newTarget func(string) Target) {
+func ReadIPsFromTxt(filename string, targetChan chan *scans.TargetBatch) {
 	// Close channel when all IPs have been sent
 	defer close(targetChan)
 
@@ -32,13 +31,26 @@ func ReadIPsFromTxt(filename string, targetChan chan *Target, newTarget func(str
 	fileScanner := bufio.NewScanner(reader)
 
 	for fileScanner.Scan() {
-		h := newTarget(fileScanner.Text())
-		targetChan <- &h
+		line := fileScanner.Text()
+		target := scans.Target{}
+		split := strings.Split(line, ",")
+		target.Ip = split[0]
+		if len(split) == 2 {
+			// Make sure to remove trailing dots in domain names: google.com. -> google.com
+			target.Domain = strings.TrimRight(split[1], ".")
+		} else if len(split) > 2 {
+			log.WithFields(log.Fields{
+				"input": line,
+			}).Error("Got input line with more than two fields.")
+		}
+		var targetBatch scans.TargetBatch
+		targetBatch = target
+		targetChan <- &targetBatch
 	}
 }
 
 // ReadTargetsFromJSON reads targets from a JSON input file and sends them to the channel
-func ReadTargetsFromJSON(filename string, targetChan chan *Target, newTarget func(string) Target) {
+func ReadSubmoaTargetsFromJSON(filename string, targetChan chan *scans.TargetBatch) {
 	// Close channel when all input has been sent
 	defer close(targetChan)
 
@@ -57,17 +69,28 @@ func ReadTargetsFromJSON(filename string, targetChan chan *Target, newTarget fun
 
 	// Convert back to JSON and send to targetChan
 	for _, submoas := range submoases {
-		input, err := Marshal([]SubmoasInput{submoas})
+		input, err := misc.Marshal([]SubmoasInput{submoas})
 		if err != nil {
 			log.Fatal("Error marshalling input JSON")
 		}
-		h := newTarget(string(input))
-		targetChan <- &h
+		json, err := Unmarshal(input)
+		targets := scans.SubmoaTarget{Json: json[0]}
+		if err != nil {
+			log.Fatal("Error unmarshalling input for target")
+		}
+		targets.Targets_ = make([]scans.Target, len(json[0].Targets))
+		for i, ip := range json[0].Targets {
+			targets.Targets_[i].Ip = ip
+			targets.Targets_[i].Domain = ""
+		}
+		var batchTarget scans.TargetBatch
+		batchTarget = targets
+		targetChan <- &batchTarget
 	}
 }
 
 // GenerateTargetsFromSeed generates target IPs using a seeded LCG and sends them to the channnel
-func GenerateTargetsFromSeed(seed string, increment, offset int64, targetChan chan *Target, newTarget func(string) Target) {
+func GenerateTargetsFromSeed(seed string, increment, offset int64, targetChan chan *scans.TargetBatch) {
 	// Close channel when all input has been sent
 	defer close(targetChan)
 
@@ -83,7 +106,8 @@ func GenerateTargetsFromSeed(seed string, increment, offset int64, targetChan ch
 			}).Error(err)
 			break
 		}
-		h := newTarget(input.String())
+		var h scans.TargetBatch
+		h = scans.Target{Ip: input.String(), Domain: ""}
 		targetChan <- &h
 	}
 }
@@ -106,62 +130,6 @@ func ReadGitVersionFromAsset() string {
 	gitVersion := fileScanner.Text()
 
 	return gitVersion
-}
-
-// ReadCiphersFromAsset reads TLS cipher suites
-// http://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
-func ReadCiphersFromAsset() map[uint16]string {
-	cipherSuites := make(map[uint16]string)
-
-	const ciphersAssetName = "tls-parameters-4.csv"
-
-	data, err := asset.Asset(ciphersAssetName)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"assetName": ciphersAssetName,
-		}).Fatal("Asset not found")
-	}
-	reader := csv.NewReader(bytes.NewBuffer(data))
-
-	for line, err := reader.Read(); err == nil; line, err = reader.Read() {
-		// Line does not contain a cipher
-		if len(line) < 2 {
-			continue
-		}
-		verStr := line[0]
-		cipher := line[1]
-
-		// 0x00,0x18 --> [0x00 0x18]
-		verSplit := strings.Split(verStr, ",")
-		if len(verSplit) != 2 {
-			continue
-		}
-		if len(verSplit[0]) != 4 || len(verSplit[1]) != 4 {
-			continue
-		}
-
-		// [0x00 , 0x18] --> 0x0018
-		verStr = verSplit[0] + verSplit[1][2:]
-		verUInt64, err := strconv.ParseUint(verStr, 0, 16)
-		if err != nil {
-			continue
-		}
-		verUInt16 := uint16(verUInt64)
-
-		if !(strings.HasPrefix(cipher, "TLS")) {
-			continue
-		}
-
-		cipherSuites[verUInt16] = cipher
-	}
-
-	// Add TLS versions
-	cipherSuites[tls.VersionSSL30] = `SSLv3`
-	cipherSuites[tls.VersionTLS10] = `TLSv1`
-	cipherSuites[tls.VersionTLS11] = `TLSv1.1`
-	cipherSuites[tls.VersionTLS12] = `TLSv1.2`
-
-	return cipherSuites
 }
 
 // LineCounter returns the number of lines in a file

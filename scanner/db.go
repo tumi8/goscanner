@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // ScanDb represents an SQL database along with the table name used for queries

@@ -1,9 +1,10 @@
 package scanner
 
 import (
-	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"github.com/tumi8/goscanner/scanner/misc"
+	"github.com/tumi8/goscanner/scanner/results"
 	"strconv"
 	"strings"
 )
@@ -53,13 +54,8 @@ func Unmarshal(input []byte) ([]SubmoasInput, error) {
 	return submoas, nil
 }
 
-// Marshal returns the byte array when passing the SubmoasInput structs
-func Marshal(output interface{}) ([]byte, error) {
-	return json.Marshal(output)
-}
-
 // CreateSubmoasOutput returns the SubmoasOutput for an input string and IP address-ScanResult pairs
-func CreateSubmoasOutput(input string, results map[string]*ScanResult) ([]byte, error) {
+func CreateSubmoasOutput(input string, res *[]*results.ScanResult) ([]byte, error) {
 	submoasInputs, err := Unmarshal([]byte(input))
 	if err != nil {
 		return nil, err
@@ -72,26 +68,30 @@ func CreateSubmoasOutput(input string, results map[string]*ScanResult) ([]byte, 
 	out := SubmoasOutput{in.Least, in.LeastO, in.Most, in.MostO, make(map[string]SubmoasTarget)}
 
 	// Set result for all scanned hosts
-	for address, res := range results {
-		var scanResult string
+	for _, result := range *res {
+		for _, subResult := range result.SubResults {
+			address := result.Address
+			var scanResult string
 
-		// res is nil -> certificate changed
-		if res.result == nil {
-			scanResult = different
-		} else if _, ok := res.result.(error); ok { // res is error -> error occurred, scan not successful
-			scanResult = closed
-		} else if _, ok := res.result.([]*x509.Certificate); ok { // res is *[]x509.Certificate -> certificate unchanged
-			scanResult = same
-		} else { // This should not be reached!
-			err = errors.New("error occurred when trying to get result for JSON output")
-			return nil, err
+			// res is nil -> certificate changed
+			if subResult.Result == nil {
+				scanResult = different
+			} else if _, ok := subResult.Result.(error); ok { // res is error -> error occurred, scan not successful
+				scanResult = closed
+			} else if _, ok := subResult.Result.(*results.CertResult); ok { // res is *[]x509.Certificate -> certificate unchanged
+				scanResult = same
+			} else { // This should not be reached!
+				err = errors.New("error occurred when trying to get result for JSON output")
+				return nil, err
+			}
+
+			// Set scan result, remove port number
+			out.Targets[address[:strings.Index(address, ":")]] = SubmoasTarget{strconv.FormatInt(subResult.ScanEnd.Unix(), 10), scanResult}
 		}
 
-		// Set scan result, remove port number
-		out.Targets[address[:strings.Index(address, ":")]] = SubmoasTarget{strconv.FormatInt(res.scanEnd.Unix(), 10), scanResult}
 	}
 
-	marshalled, err := Marshal([]SubmoasOutput{out})
+	marshalled, err := misc.Marshal([]SubmoasOutput{out})
 	if err != nil {
 		return nil, err
 	}
