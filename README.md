@@ -1,8 +1,5 @@
 # TUM goscanner
 
-[![Build Status](https://travis-ci.org/tumi8/goscanner.svg?branch=master)](https://travis-ci.org/tumi8/goscanner)
-
-
 goscanner is a tool for large-scale TLS, x509 Certificate, HTTP header, 
 and SSH scans developed at the TUM Chair of Network Architectures and Services (see [Authors](./AUTHORS.md)).
 
