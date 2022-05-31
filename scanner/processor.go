@@ -2,28 +2,24 @@ package scanner
 
 import (
 	"encoding/csv"
-	"encoding/hex"
-	"errors"
+	"github.com/rs/zerolog/log"
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type ResultProcessor interface {
 	Prepare()
-	ProcessResult(*results.BatchScanResult)
+	ProcessResult(*results.ScanResult)
 	Finish()
 }
 
 // Processor is the base result processing struct, embedding a ResultProcessor
 type Processor struct {
 	ResultProcessor
-	OutputChan <-chan *results.BatchScanResult
+	OutputChan <-chan *results.ScanResult
 }
 
 // Process is the result processing loop which calls the functions of the embedded ResultProcessor
@@ -35,176 +31,88 @@ func (p Processor) Process() {
 	p.Finish()
 }
 
+type outputTuple struct {
+	parent         *results.ScanResult
+	subResultIndex int
+}
+
 type CsvProcessor struct {
-	outputDir	string
-	csvWriter	map[string]*csv.Writer
-	files 		[]*os.File
-	fileLocks	sync.Map
-	skipErrors	bool
-	cacheFunc	func([]byte) []byte
-	cache 		map[string]map[string]struct{}
+	outputDir  string
+	csvOutputs map[string]chan outputTuple
+	skipErrors bool
+	certCache  *misc.CertCache
+	wg         sync.WaitGroup
 }
 
-func NewCsvProcessor(outputDir string, skipErrors bool, cacheFunc func([]byte) []byte) CsvProcessor {
-	return CsvProcessor{
+func NewCsvProcessor(outputDir string, skipErrors bool, cacheFunc func([]byte) []byte) *CsvProcessor {
+	return &CsvProcessor{
 		outputDir:  outputDir,
-		csvWriter:  make(map[string]*csv.Writer),
-		files:      make([]*os.File, 0),
-		fileLocks:  sync.Map{},
+		csvOutputs: make(map[string]chan outputTuple),
 		skipErrors: skipErrors,
-		cacheFunc:  cacheFunc,
-		cache:      make(map[string]map[string]struct{}),
+		certCache:  misc.NewCertCache(cacheFunc),
 	}
 }
 
-func (p CsvProcessor) Prepare() {}
-func (p CsvProcessor) Finish() {
-	for _, writer := range p.csvWriter {
-		writer.Flush()
+func (p *CsvProcessor) Prepare() {}
+func (p *CsvProcessor) Finish() {
+	for i := range p.csvOutputs {
+		close(p.csvOutputs[i])
 	}
-	for _, file := range p.files {
-		file.Close()
+	p.wg.Wait()
+}
+
+func (p *CsvProcessor) ProcessResult(result *results.ScanResult) {
+	hasHostsCsv := false
+	for i := range result.SubResults {
+		if result.SubResults[i].Result.GetCsvFileName() == results.FileHosts {
+			hasHostsCsv = true
+		}
+		p.ProcessSubResult(result, i)
+	}
+	if !hasHostsCsv {
+		// In some cases it might happen that nothing was written into the hosts.csv
+		// In these cases we can just write a small entry containing the ID to Host mappings
+		sub2 := result.SubResults[0]
+		sub2.Result = &results.TCPResult{}
+		result.AddResult(sub2)
+		p.ProcessSubResult(result, len(result.SubResults)-1)
 	}
 }
-func (p CsvProcessor) ProcessResult(batch *results.BatchScanResult) {
-	for _, result := range batch.Results {
-		for _, subResult := range result.SubResults {
-			fileName := filepath.Join(p.outputDir, subResult.Result.GetCsvFileName())
-			var lock sync.Mutex
-			lock2, _ := p.fileLocks.LoadOrStore(fileName, sync.Mutex{})
-			lock = lock2.(sync.Mutex)
-			lock.Lock()
-			if p.csvWriter[fileName] == nil {
-				file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-				p.files = append(p.files, file)
-				if err != nil {
-					log.Println("Error while opening file " + fileName, err)
-				}
-				p.csvWriter[fileName] = csv.NewWriter(file)
-				p.csvWriter[fileName].Write(subResult.Result.GetCsvHeader())
-			}
-			subResult.Result.WriteCsv(p.csvWriter[fileName], result, subResult.SynStart, subResult.SynEnd, subResult.ScanEnd, p.skipErrors, p.cacheFunc, p.cache)
-			lock.Unlock()
+
+func (p *CsvProcessor) ProcessSubResult(parent *results.ScanResult, subResultIndex int) {
+	fileName := filepath.Join(p.outputDir, parent.SubResults[subResultIndex].Result.GetCsvFileName())
+
+	if p.csvOutputs[fileName] == nil {
+		p.csvOutputs[fileName] = make(chan outputTuple, 10)
+		p.wg.Add(1)
+		go p.StartOutputWriter(fileName, parent.SubResults[subResultIndex].Result.GetCsvHeader())
+	}
+	p.csvOutputs[fileName] <- outputTuple{
+		parent:         parent,
+		subResultIndex: subResultIndex,
+	}
+}
+
+func (p *CsvProcessor) StartOutputWriter(fileName string, header []string) {
+	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Panic().Err(err).Str("file", fileName).Msg("Error Opening file")
+	}
+	defer file.Close()
+	defer p.wg.Done()
+
+	csvWriter := csv.NewWriter(file)
+	err = csvWriter.Write(header)
+	if err != nil {
+		log.Panic().Err(err).Str("file", fileName).Msg("Error writing header")
+	}
+
+	for input := range p.csvOutputs[fileName] {
+		subResult := input.parent.SubResults[input.subResultIndex]
+		err := subResult.Result.WriteCsv(csvWriter, input.parent, subResult.SynStart, subResult.SynEnd, subResult.ScanEnd, p.skipErrors, p.certCache)
+		if err != nil {
+			log.Err(err).Str("file", fileName).Str("Address", input.parent.Address).Str("Domain", input.parent.Domain).Msg("Error writing CSV output to file")
 		}
 	}
-}
-
-
-// TLSLiveProcessor implements the processing of TLS scanning results
-type TLSLiveProcessor struct {
-	jsonFile  *os.File
-	certDir   string
-	tableName string
-}
-// NewTLSLiveProcessor returns a new processor for results of live scanned TLS hosts
-func NewTLSLiveProcessor(jsonFilename, certDir, tableName string) (*ResultProcessor, error) {
-	t := TLSLiveProcessor{}
-
-	// Create a new file for JSON output, returns an error if it already exists
-	fh, err := os.OpenFile(jsonFilename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
-	if err != nil {
-		return nil, err
-	}
-	t.jsonFile = fh
-
-	t.certDir = certDir
-	t.tableName = tableName
-
-	var r ResultProcessor
-	r = t
-
-	return &r, nil
-}
-
-// Prepare is called before the results are being processed
-func (t TLSLiveProcessor) Prepare() {
-	t.jsonFile.Write([]byte{'['})
-}
-// Finish is called after the results have been processed
-func (t TLSLiveProcessor) Finish() {
-	info, err := t.jsonFile.Stat()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"file": t.jsonFile.Name(),
-		}).Fatal(err)
-	}
-
-	// Do not seek back if the input was an empty JSON list []
-	if info.Size() > 1 {
-		t.jsonFile.Seek(-1, 1)
-	}
-
-	// Write closing bracket and close file
-	t.jsonFile.Write([]byte{']'})
-	t.jsonFile.Close()
-}
-// ProcessResult checks the database, writes the JSON output and dumps the certificate chain
-func (t TLSLiveProcessor) ProcessResult(in *results.BatchScanResult) {
-
-	for _, result := range in.Results {
-		for _, subResult := range result.SubResults {
-			cert, ok := subResult.Result.(*results.CertResult)
-			if ok {
-				// The resulting filename is the base directory concatenated with the IP address, the Unix timestamp and the number of certificate in the chain
-				filename := filepath.Join(t.certDir, result.Address+"-"+strconv.FormatInt(subResult.ScanEnd.Unix(), 10)+"-"+strconv.Itoa(cert.Depth)+".der")
-
-				// Create a new file for the cert dump, returns an error if it already exists
-				fh, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
-				if err != nil {
-					log.Errorln("Could not open file " + filename, err)
-					continue
-				}
-				defer fh.Close()
-
-				// Dump raw DER-encoded certificate
-				fh.Write(cert.Cert.Raw)
-			}
-		}
-	}
-
-	// Get database handle
-	db, err := PostgresDb("host=/var/run/postgresql sslmode=disable user=heap dbname=tlshashes", t.tableName)
-	if err != nil {
-		log.Fatal("Could not get database handle: ", err)
-	}
-	defer db.Close()
-
-	// Check the database for all results
-	for _, result := range in.Results {
-		for _, subResult := range result.SubResults {
-
-			// Try to convert the result in a TLSResult
-			tlsRes, ok := subResult.Result.(*results.TLSResult)
-			if !ok || tlsRes.Err != nil {
-				// Most probably the result is an error
-				continue
-			}
-
-			// Extract public key from leaf certificate
-			cert := tlsRes.Certificates[len(tlsRes.Certificates)-1]
-			if err != nil {
-				// Only RSA and ECDSA public keys are supported
-				result.AddResult(results.ScanSubResult{subResult.SynStart, subResult.SynEnd, subResult.ScanEnd, &results.TLSResult{nil, tlsRes.Version, tlsRes.Cipher, err}})
-				continue
-			}
-			hash := misc.GetSHA256(cert.Raw)
-
-			// Certificate is not in database
-			if !db.QueryChecksum(result.Address, hex.EncodeToString(hash)) {
-				result.AddResult(results.ScanSubResult{subResult.SynStart, subResult.SynEnd, subResult.ScanEnd, &results.TLSResult{nil, tlsRes.Version, tlsRes.Cipher, errors.New("certificate not in database")}})
-			}
-		}
-	}
-
-	// Write results to JSON file
-	output, err := CreateSubmoasOutput(in.Input, &in.Results)
-	if err != nil {
-		log.Fatal("Error creating JSON output", err)
-	}
-
-	// Don't write enclosing '[' and ']'
-	t.jsonFile.Write(output[1 : len(output)-1])
-
-	// Append ','
-	t.jsonFile.Write([]byte{','})
+	csvWriter.Flush()
 }

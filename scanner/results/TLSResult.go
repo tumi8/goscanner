@@ -3,29 +3,33 @@ package results
 import (
 	"crypto/x509"
 	"encoding/csv"
-	"errors"
-	log "github.com/sirupsen/logrus"
+	"encoding/hex"
+	"github.com/rs/zerolog/log"
 	"github.com/tumi8/goscanner/scanner/misc"
+	"github.com/tumi8/goscanner/tls"
 	"net"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
-var hostCsvHeader = []string{"host", "rtt", "port", "server_name", "synStart", "synEnd", "scanEnd", "protocol", "cipher", "resultString", "verify_err_no", "verify_code", "server_version", "depth", "depth_verbose", "error_data"}
+var hostCsvHeader = []string{"id", "ip", "port", "server_name", "synStart", "synEnd", "scanEnd", "protocol", "cipher", "resultString", "error_data", "cert_id", "cert_hash", "pub_key_hash", "cert_valid", "tls_alerts_send", "peer_certificates", "tls_alerts_received", "client_hello"}
 var skippedErrors = [...]string{"TIMEOUT", "CONNECTION REFUSED", "NO ROUTE", "NETWORK UNREACHABLE"}
-var cipherSuites map[uint16]string
 var timeDiff time.Duration
 
 type TLSResult struct {
-	Certificates []*x509.Certificate
-	Version      uint16
-	Cipher       uint16
-	Err          error
+	Certificate     *x509.Certificate
+	AllCertificates []*x509.Certificate
+	Version         uint16
+	Cipher          uint16
+	SendAlerts      []tls.Alert
+	RecvAlerts      []tls.Alert
+	Err             error
+	Errors          []error
 }
 
 func init() {
-	cipherSuites = misc.ReadCiphersFromAsset()
 	timeDiff = misc.GetNtpLocalTimeDiff()
 }
 
@@ -37,51 +41,103 @@ func (t *TLSResult) GetCsvHeader() []string {
 	return hostCsvHeader
 }
 
-func (t *TLSResult)  WriteCsv(writer *csv.Writer, parentResult *ScanResult, synStart time.Time, synEnd time.Time, scanEnd time.Time, skipErrors bool,  cacheFunc func([]byte) []byte, cache map[string]map[string]struct{}) {
+func (t *TLSResult) WriteCsv(writer *csv.Writer, parentResult *ScanResult, synStart time.Time, synEnd time.Time, scanEnd time.Time, skipErrors bool, certCache *misc.CertCache) error {
 	ip, port, err := net.SplitHostPort(parentResult.Address)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"address": parentResult.Address,
-		}).Error("Could not split address into host and port parts.")
+		log.Err(err).Str("address", parentResult.Address).Msg("Could not split address into host and port parts.")
 	}
 
 	resultString := "SUCCESS"
-	handshakeError := errors.New("")
+	var handshakeErrors []string
 	if t.Err != nil {
-		handshakeError = t.Err
+		handshakeErrors = append(handshakeErrors, t.Err.Error())
 		resultString = HandshakeErrorLookup(t.Err)
 		if skipErrors {
 			for _, e := range skippedErrors {
 				if resultString == e {
-					return
+					return nil
 				}
 			}
 		}
 	}
 
-	var protocol, cipher string
-	var ok bool
-
 	// Check protocol and cipher
-	if protocol, ok = cipherSuites[t.Version]; !ok {
-		protocol = "not set: " + strconv.Itoa(int(t.Version))
-	}
-	if cipher, ok = cipherSuites[t.Cipher]; !ok {
-		cipher = "unknown: " + strconv.Itoa(int(t.Cipher))
-	}
+	protocol := strconv.Itoa(int(t.Version))
+	cipher := strconv.FormatUint(uint64(t.Cipher), 16)
 
 	var scanEndStr string
 	if scanEnd.Unix() > 0 {
 		scanEndStr = strconv.FormatInt(scanEnd.Add(timeDiff).Unix(), 10)
 	}
 
-	// Write row in host CSV file
-	// [host, rtt, port, server_name, synStart, synEnd, scanEnd, protocol, cipher, result, verify_err_no, verify_code, server_version, depth, depth_verbose, error_data]
-	if ok := writer.Write([]string{ip, "", port, parentResult.Domain, strconv.FormatInt(synStart.Add(timeDiff).Unix(), 10), strconv.FormatInt(synEnd.Add(timeDiff).Unix(), 10), scanEndStr, protocol, cipher, resultString, "", "", "", "", "", handshakeError.Error()}); ok != nil {
-		log.WithFields(log.Fields{
-			"file": parentResult.Address,
-		}).Error("Error writing to host file")
+	idCert := ""
+	sha256Hex := ""
+	leafSHA256SPKI := ""
+
+	if t.Certificate != nil {
+		sha256Hex = hex.EncodeToString(misc.GetSHA256(t.Certificate.Raw))
+		idCertUInt, _ := certCache.GetID(t.Certificate)
+		idCert = strconv.FormatUint(uint64(idCertUInt), 10)
+		leafSHA256SPKI = hex.EncodeToString(misc.GetSHA256(t.Certificate.RawSubjectPublicKeyInfo))
 	}
+
+	var peerCertificates []int
+	if t.AllCertificates != nil {
+		for _, cert := range t.AllCertificates {
+			id, _ := certCache.GetID(cert)
+			peerCertificates = append(peerCertificates, int(id))
+		}
+	}
+
+	var certValid *bool
+
+	sendAlerts := make([]int, len(t.SendAlerts))
+	for i, alert := range t.SendAlerts {
+		if alert.GetCode() == 42 {
+			certValid = misc.NewFalse()
+		}
+		sendAlerts[i] = int(alert.GetCode())
+	}
+	if len(t.Errors) > 0 {
+		for _, err := range t.Errors {
+			handshakeErrors = append(handshakeErrors, err.Error())
+			if strings.Contains(err.Error(), "invalid signature") {
+				certValid = misc.NewFalse()
+			}
+		}
+	}
+
+	if certValid == nil && t.Err == nil {
+		certValid = misc.NewTrue()
+	}
+	recvAlerts := make([]int, len(t.RecvAlerts))
+	for i, alert := range t.RecvAlerts {
+		recvAlerts[i] = int(alert.GetCode())
+	}
+
+	// Write row in host CSV file
+	// [host, port, server_name, synStart, synEnd, scanEnd, protocol, cipher, result, error_data, cert_hash, cert_valid, pub_key_hash]
+	return writer.Write([]string{
+		parentResult.Id.ToString(),
+		ip,
+		port,
+		parentResult.Domain,
+		strconv.FormatInt(synStart.Add(timeDiff).Unix(), 10),
+		strconv.FormatInt(synEnd.Add(timeDiff).Unix(), 10),
+		scanEndStr,
+		protocol,
+		cipher,
+		resultString,
+		misc.ToJSONArray(handshakeErrors),
+		idCert,
+		sha256Hex,
+		leafSHA256SPKI,
+		misc.ToCompactBinary(certValid),
+		misc.ToJSONIntArray(sendAlerts),
+		misc.ToJSONIntArray(peerCertificates),
+		misc.ToJSONIntArray(recvAlerts),
+		parentResult.CHName,
+	})
 }
 
 // handshakeErrorLookup returns a string for a certain handshake error
@@ -113,4 +169,3 @@ func HandshakeErrorLookup(err error) string {
 	}
 	return result
 }
-

@@ -1,4 +1,8 @@
 *.swp
-scanner/asset/*
+example-output
 git-version
 goscanner
+.idea
+client-hellos
+createch-bin
+tmp

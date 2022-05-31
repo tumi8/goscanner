@@ -5,22 +5,22 @@ import (
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/ssh"
+	"io"
 	"net"
 	"strings"
 	"time"
 )
 
 type SSHScan struct {
-
 }
 
 func (s *SSHScan) GetDefaultPort() int {
 	return 22
 }
 
-func (s *SSHScan) Init(opts *misc.Options)  {}
+func (s *SSHScan) Init(opts *misc.Options, keylogFile io.Writer) {}
 
-func (s *SSHScan) Scan(conn *net.Conn, target *Target, result *results.ScanResult,timeout time.Duration, synStart time.Time, synEnd time.Time) *net.Conn {
+func (s *SSHScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error) {
 	serverInfo, err := s.scanSSH(conn, timeout)
 
 	scanResult := &results.ScanSubResult{
@@ -71,9 +71,8 @@ func (s *SSHScan) Scan(conn *net.Conn, target *Target, result *results.ScanResul
 
 	scanResult.Result = sshResult
 	result.AddResult(*scanResult)
-	return conn
+	return conn, nil
 }
-
 
 // dontAcceptHostKeyErr is a dummy error which is returned by key callback function to interrupt the SSH connection setup
 var dontAcceptHostKeyErr = errors.New("dontAcceptHostKeyErr")
@@ -86,7 +85,7 @@ func (s SSHScan) keyCallback(hostname string, remote net.Addr, key ssh.PublicKey
 }
 
 // scanSSH sets the correct host key callback function and establishes an SSH connection
-func (s SSHScan) scanSSH(conn *net.Conn, timeout time.Duration) (*ssh.ServerInfo, error) {
+func (s SSHScan) scanSSH(conn net.Conn, timeout time.Duration) (*ssh.ServerInfo, error) {
 	// SSH client config
 	var sshConfig = &ssh.ClientConfig{
 		HostKeyCallback:   s.keyCallback,
@@ -96,7 +95,7 @@ func (s SSHScan) scanSSH(conn *net.Conn, timeout time.Duration) (*ssh.ServerInfo
 	}
 
 	// Establish SSH connection on top of TCP connection
-	_, _, _, serverInfo, err := ssh.NewClientConn(*conn, (*conn).RemoteAddr().String(), sshConfig)
+	_, _, _, serverInfo, err := ssh.NewClientConn(conn, conn.RemoteAddr().String(), sshConfig)
 
 	return serverInfo, err
 }

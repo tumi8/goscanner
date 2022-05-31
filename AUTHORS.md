@@ -1,5 +1,8 @@
 # Authors
 * Oliver Gasser <gasser@net.in.tum.de>
+* Markus Sosnowski <sosnowski@net.in.tum.de>
+* Patrick Sattler
+* Johannes Zirngibl
 
 ## Contributors
 * Matthias Lucas Jaros <jaros@in.tum.de>

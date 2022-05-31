@@ -2,7 +2,7 @@ package results
 
 import (
 	"encoding/csv"
-	"sync"
+	"github.com/tumi8/goscanner/scanner/misc"
 	"time"
 )
 
@@ -16,17 +16,22 @@ const (
 
 	// files to save TLS scan results
 	FileCerts       = "certs.csv"
-	FileCertHostRel = "cert_host_rel.csv"
+	FileCertHostRel = "cert_chain.csv"
 	FileScsv        = "scsv.csv"
 	FileHttp        = "http.csv"
+	FileHttpVerbose = "http_verbose.csv"
+	FileTLSVerbose  = "tls_verbose.csv"
+	FileStapledOCSP = "stapled_ocsp_responses.csv"
+	FileKeyLog      = "tls-keylog"
 )
 
 type ScanResult struct {
-	SubResults	[]ScanSubResult
-	Ip			string
-	Domain 		string
-	resultMutex	sync.Mutex
-	Address		string
+	SubResults []ScanSubResult
+	Id         misc.SessionUID
+	Ip         string
+	Domain     string
+	Address    string
+	CHName     string
 }
 
 // ScanResult contains the time when the measurement occurred and the result
@@ -37,19 +42,12 @@ type ScanSubResult struct {
 	Result   Result
 }
 
-type BatchScanResult struct {
-	Input  string
-	Results []*ScanResult
-}
-
 type Result interface {
 	GetCsvFileName() string
 	GetCsvHeader() []string
-	WriteCsv(writer *csv.Writer, parentResult *ScanResult, synStart time.Time, synEnd time.Time, scanEnd time.Time, skipErrors bool,  cacheFunc func([]byte) []byte, cache map[string]map[string]struct{})
+	WriteCsv(writer *csv.Writer, parentResult *ScanResult, synStart time.Time, synEnd time.Time, scanEnd time.Time, skipErrors bool, certCache *misc.CertCache) error
 }
 
 func (s *ScanResult) AddResult(r ScanSubResult) {
-	s.resultMutex.Lock()
-	defer s.resultMutex.Unlock()
 	s.SubResults = append(s.SubResults, r)
 }
