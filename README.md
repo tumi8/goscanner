@@ -42,12 +42,13 @@ The IP, domain tuples can be generated, for example, with [massdns](https://gith
     | csvtool col 1,2 - | awk -F, '$2!=""' > input.csv
 
 goscanner provides a utility function to enhance the input with the client hellos 
-(we recommend randomizing the input to reduce bursts on target servers):
+(we recommend randomizing the input to reduce bursts on target servers).
+The new input files will contain the cross product between the set of client hellos and the original input set of targets.
+The names of the client hellos are the names of all json files in the `--ch-dir` (e.g., `client_hello_1.json`).
 
     ./goscanner create-ch-input --ch-dir ./client-hellos --input input.csv | shuf > input-chs.csv
 
-The client hello is the name of a json file (e.g., `client_hello_1.json`). 
-All client hellos can be loaded from a directory with the config option
+For scanning, the client hellos can be loaded from a directory with the config option
 
     client-hello-dir = ./client-hellos
 
@@ -70,6 +71,7 @@ goscanner will download possible parameters for the CHs from IANA into the `tmp`
 
 goscanner is able to fingerprint TLS servers as described by [Active TLS Stack Fingerprinting](https://active-tls-fingerprinting.github.io).
 Additionally, this site provides optimized client hellos for fingerprinting.
+If you use the goscanner for fingerprinting, please cite our paper.
 
 The goscanner is able to post-process a scan with multiple CHs per target to generate the fingerprints.
 
