@@ -123,6 +123,8 @@ const (
 	ExtensionKeyShare                       = extensionKeyShare
 	ExtensionRenegotiationInfo              = extensionRenegotiationInfo
 	ExtensionExtendedMasterSecret    uint16 = 23
+	ExtensionEncryptThenMac          uint16 = 22
+	ExtensionHeartbeat               uint16 = 15
 	ExtensionCompressCertificate     uint16 = 27
 	ExtensionRecordSizeLimit         uint16 = 28
 	ExtensionMaxFragmentLength       uint16 = 1
@@ -252,12 +254,13 @@ type ConnectionState struct {
 	SignedCertificateTimestamps [][]byte              // SCTs from the peer, if any
 	OCSPResponse                []byte                // stapled OCSP response from peer, if any
 	ServerHello                 *ServerHelloMsg
-	ClientHello                 ClientHelloMsg
+	ClientHello                 *ClientHelloMsg
 	ServerExtensions            []Extension
 	ServerEncryptedExtensions   []Extension
 	ServerCertRequestExtensions []Extension
 	HelloRetryRequestExtensions []Extension
 	CertificateExtensions       []Extension
+	Pre13ECDHParams             CurveID
 	SendAlerts                  []Alert
 	RecvAlerts                  []Alert
 	Errors                      []error

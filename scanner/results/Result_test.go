@@ -29,6 +29,8 @@ var allResults = []Result{
 	&TLSResult{},
 	&TCPResult{},
 	&StapledOCSPResult{},
+	&JARMResult{},
+	&DissecTLSResult{},
 }
 
 func init() {

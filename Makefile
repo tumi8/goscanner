@@ -17,7 +17,7 @@ LDFLAGS=-ldflags "-X main.GitBranch=$(GITBRANCH) -X main.GitHash=$(GITDESCRIBE)$
 .PHONY: all lint test race goget random-chs
 
 goscanner: $(GO_SOURCES)
-	go build $(LDFLAGS) -o $@ main.go
+	go build -mod readonly $(LDFLAGS) -o $@ main.go
 
 client-hellos: goscanner
 	./goscanner create-ch --out $@ -c jarm
@@ -28,6 +28,7 @@ random-chs: goscanner
 	./goscanner create-ch --out ./client-hellos -c random --num-random 1000 --tmp ./tmp
 
 lint: ## Lint the files
+	go get -u golang.org/x/lint
 	golint -set_exit_status ${PKG_LIST}
 
 test: ## Run unittests
@@ -38,7 +39,6 @@ race: goget ## Run data race detector
 
 goget:
 	go get
-	go get -u golang.org/x/lint
 
 goscanner-linux-amd64: $(GO_SOURCES) go.sum
 	env GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o goscanner-linux-amd64

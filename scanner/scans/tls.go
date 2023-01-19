@@ -2,10 +2,13 @@ package scans
 
 import (
 	"crypto/x509"
+	"errors"
 	"github.com/rs/zerolog/log"
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/goscanner/tls"
+	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"time"
@@ -31,11 +34,14 @@ func (s *TLSScan) Init(opts *misc.Options, keylogFile io.Writer) {
 }
 
 // ScanProtocol performs the actual TLS scan and adds results to the target
-func (s *TLSScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error) {
+func (s *TLSScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error) {
 	serverName := target.Domain
 	cache := tls.NewLRUClientSessionCache(1)
 
-	tlsConn, err := scanTLS(conn, serverName, timeout, 0, cache, nil, nil, target.CHName, s.keyLogFile)
+	tlsConn, err := scanTLS(conn, serverName, timeout, 0, cache, nil, nil, target.CHName, s.keyLogFile, nil)
+	if tlsConn == nil {
+		return nil, err
+	}
 	connectionState := tlsConn.ConnectionState()
 
 	if s.extendedTLSExport {
@@ -132,8 +138,11 @@ func (s *TLSScan) Scan(conn net.Conn, target *Target, result *results.ScanResult
 	}
 }
 
-func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, clientSessionCache tls.ClientSessionCache, ciphers []uint16, alpnProtocols []string, clientHello string, keyLogWriter io.Writer) (*tls.Conn, error) {
+func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion uint16, clientSessionCache tls.ClientSessionCache, ciphers []uint16, alpnProtocols []string, clientHello string, keyLogWriter io.Writer, clientHelloPreset *tls.ClientHelloPreset) (*tls.Conn, error) {
 	customClientHello := misc.GetClientHello(clientHello)
+	if clientHelloPreset != nil {
+		customClientHello = clientHelloPreset
+	}
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
@@ -151,6 +160,11 @@ func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion
 		tlsConfig.CipherSuites = ciphers
 	}
 
+	if conn == nil {
+		log.Error().Str("ServerName", serverName).Msg("TCP Connection was nil")
+		return nil, errors.New("TCP Connection was nil")
+	}
+
 	// Establish TLS connection on top of TCP connection
 	tlsConn := tls.Client(conn, tlsConfig)
 	now := time.Now()
@@ -165,6 +179,10 @@ func scanTLS(conn net.Conn, serverName string, timeout time.Duration, maxVersion
 
 // reconnect reestablishes the TCP connection
 func reconnect(conn net.Conn, timeout time.Duration) (net.Conn, time.Time, time.Time, error) {
+	return reconnectContext(context.Background(), conn, timeout)
+}
+
+func reconnectContext(ctx context.Context, conn net.Conn, timeout time.Duration) (net.Conn, time.Time, time.Time, error) {
 	localAddr, _, _ := net.SplitHostPort((conn).LocalAddr().String())
 	ip := (conn).RemoteAddr().String()
 	// Close previous connection
@@ -177,7 +195,7 @@ func reconnect(conn net.Conn, timeout time.Duration) (net.Conn, time.Time, time.
 	dialer := net.Dialer{Timeout: timeout, LocalAddr: &net.TCPAddr{IP: net.ParseIP(localAddr)}}
 	synEnd := time.Now().UTC()
 
-	newConn, err := dialer.Dial("tcp", ip)
+	newConn, err := dialer.DialContext(ctx, "tcp", ip)
 
 	return newConn, synStart, synEnd, err
 }

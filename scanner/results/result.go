@@ -21,7 +21,9 @@ const (
 	FileHttp        = "http.csv"
 	FileHttpVerbose = "http_verbose.csv"
 	FileTLSVerbose  = "tls_verbose.csv"
+	FileDissecTLS   = "dissectls.csv"
 	FileStapledOCSP = "stapled_ocsp_responses.csv"
+	FileJarm        = "jarm.csv"
 	FileKeyLog      = "tls-keylog"
 )
 

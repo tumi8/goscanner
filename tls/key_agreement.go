@@ -67,10 +67,18 @@ func (ka rsaKeyAgreement) generateClientKeyExchange(config *Config, clientHello 
 		return nil, nil, err
 	}
 
-	encrypted, err := rsa.EncryptPKCS1v15(config.rand(), cert.PublicKey.(*rsa.PublicKey), preMasterSecret)
-	if err != nil {
-		return nil, nil, err
+	var encrypted []byte
+
+	switch cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		encrypted, err = rsa.EncryptPKCS1v15(config.rand(), cert.PublicKey.(*rsa.PublicKey), preMasterSecret)
+		if err != nil {
+			return nil, nil, err
+		}
+	default:
+		return nil, nil, errors.New("tls/rsaKeyAgreement: wrong cert key type")
 	}
+
 	ckx := new(clientKeyExchangeMsg)
 	ckx.ciphertext = make([]byte, len(encrypted)+2)
 	ckx.ciphertext[0] = byte(len(encrypted) >> 8)
@@ -140,6 +148,7 @@ type ecdheKeyAgreement struct {
 	// and returned in generateClientKeyExchange.
 	ckx             *clientKeyExchangeMsg
 	preMasterSecret []byte
+	curve           CurveID
 }
 
 func (ka *ecdheKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, hello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
@@ -264,6 +273,8 @@ func (ka *ecdheKeyAgreement) processServerKeyExchange(config *Config, clientHell
 	if len(sig) < 2 {
 		return errServerKeyExchange
 	}
+
+	ka.curve = curveID
 
 	if _, ok := curveForCurveID(curveID); curveID != X25519 && !ok {
 		return errors.New("tls: server selected unsupported curve")

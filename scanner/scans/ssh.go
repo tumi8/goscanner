@@ -5,6 +5,7 @@ import (
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/ssh"
+	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"strings"
@@ -20,7 +21,7 @@ func (s *SSHScan) GetDefaultPort() int {
 
 func (s *SSHScan) Init(opts *misc.Options, keylogFile io.Writer) {}
 
-func (s *SSHScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error) {
+func (s *SSHScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error) {
 	serverInfo, err := s.scanSSH(conn, timeout)
 
 	scanResult := &results.ScanSubResult{

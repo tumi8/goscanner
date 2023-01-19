@@ -84,6 +84,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, []ecdheParameters, error) {
 		config.SessionTicketsDisabled = !config.ClientHelloPreset.SessionTicket
 		config.CurvePreferences = config.ClientHelloPreset.SupportedGroups
 		config.KeyShares = config.ClientHelloPreset.KeyShares
+		c.vers = config.ClientHelloPreset.Version
 	}
 
 	if c.handshakes > 0 {
@@ -141,8 +142,8 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, []ecdheParameters, error) {
 			return nil, nil, fmt.Errorf("tls: Defined %d KeyShares, but only %d are actually available", c.config.KeyShares, len(curvePreferences))
 		}
 
-		curves := curvePreferences[0:c.config.KeyShares]
-		for _, curveID := range curves {
+		var keyShares uint
+		for _, curveID := range curvePreferences {
 			keyshareIsGrease := false
 			var paramsSingle ecdheParameters
 			for _, value := range GreaseValues {
@@ -157,9 +158,13 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, []ecdheParameters, error) {
 				}
 			}
 			if !keyshareIsGrease {
-				if _, ok := curveForCurveID(curveID); curveID != X25519 && !ok {
-					return nil, nil, errors.New("tls: CurvePreferences includes unsupported curve for key share")
+				if keyShares >= c.config.KeyShares {
+					break
 				}
+				if _, ok := curveForCurveID(curveID); curveID != X25519 && !ok {
+					continue
+				}
+				keyShares++
 				paramsSingle, err = generateECDHEParameters(config.rand(), curveID)
 				if err != nil {
 					return nil, nil, err
@@ -167,6 +172,9 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, []ecdheParameters, error) {
 			}
 			params = append(params, paramsSingle)
 			hello.keyShares = append(hello.keyShares, keyShare{group: curveID, data: paramsSingle.PublicKey()})
+		}
+		if keyShares < c.config.KeyShares {
+			return nil, nil, errors.New("tls: CurvePreferences include not enough supported curves")
 		}
 	}
 
@@ -210,12 +218,12 @@ func (c *Conn) clientHandshake() (err error) {
 		return err
 	}
 
+	c.clientHello = hello
+
 	msg, err := c.readHandshake()
 	if err != nil {
 		return err
 	}
-
-	c.clientHello = hello
 
 	serverHello, ok := msg.(*serverHelloMsg)
 	c.serverHello = serverHello
@@ -554,6 +562,9 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 				c.sendAlert(alertUnexpectedMessage)
 				return err
 			}
+		}
+		if ecdhKE, ok := keyAgreement.(*ecdheKeyAgreement); ok {
+			hs.c.pre13ecdhParam = ecdhKE.curve
 		}
 
 		msg, err = c.readHandshake()

@@ -72,7 +72,10 @@ func (p *CsvProcessor) ProcessResult(result *results.ScanResult) {
 	if !hasHostsCsv {
 		// In some cases it might happen that nothing was written into the hosts.csv
 		// In these cases we can just write a small entry containing the ID to Host mappings
-		sub2 := result.SubResults[0]
+		sub2 := results.ScanSubResult{}
+		if len(result.SubResults) > 0 {
+			sub2 = result.SubResults[0]
+		}
 		sub2.Result = &results.TCPResult{}
 		result.AddResult(sub2)
 		p.ProcessSubResult(result, len(result.SubResults)-1)

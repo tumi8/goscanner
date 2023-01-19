@@ -6,6 +6,7 @@ import (
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/goscanner/tls"
+	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"time"
@@ -38,7 +39,7 @@ func (s *SCSVScan) Init(opts *misc.Options, keylogFile io.Writer) {
 }
 
 // ScanProtocol performs the actual TLS scan and adds results to the target
-func (s *SCSVScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error) {
+func (s *SCSVScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error) {
 
 	oldTlsConn, ok := conn.(*tls.Conn)
 
@@ -58,7 +59,7 @@ func (s *SCSVScan) Scan(conn net.Conn, target *Target, result *results.ScanResul
 		return connNew, err
 	} else {
 		// Use SCSV pseudo cipher with decreased TLS version
-		tlsConn, err := scanTLS(conn, target.Domain, timeout, tlsVersion-1, nil, scsvCiphers, nil, target.CHName, s.keyLogFile)
+		tlsConn, err := scanTLS(conn, target.Domain, timeout, tlsVersion-1, nil, scsvCiphers, nil, target.CHName, s.keyLogFile, nil)
 
 		if err != nil {
 			// This is what should happen according to RFC 7507

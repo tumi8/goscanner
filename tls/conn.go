@@ -118,6 +118,8 @@ type Conn struct {
 	helloRetryRequestExtensions []Extension
 	certificateExtensions       []Extension
 
+	pre13ecdhParam CurveID
+
 	sendAlerts []alert
 	recvAlerts []alert
 
@@ -151,10 +153,18 @@ type ClientHelloPreset struct {
 	KeyShares              uint
 	GreaseExtension        uint16
 	ReversedExtensionOrder bool
+	Heartbeat              uint8
+	EncryptThenMac         bool
 }
 
 func (c *ClientHelloPreset) apply(hello *clientHelloMsg) {
-	hello.cipherSuites = c.Ciphers
+	if c.Ciphers != nil {
+		hello.cipherSuites = c.Ciphers
+	}
+	if c.Version > 0 {
+		hello.vers = c.Version
+	}
+
 	hello.compressionMethods = c.CompressionMethods
 	hello.secureRenegotiationSupported = c.RenegotiationInfo
 	hello.supportedSignatureAlgorithms = c.SignatureAlgorithms
@@ -169,9 +179,10 @@ func (c *ClientHelloPreset) apply(hello *clientHelloMsg) {
 	hello.recordSizeLimit = c.RecordSizeLimit
 	hello.maxFragmentLength = c.MaxFragmentLength
 	hello.extendedMasterSecret = c.ExtendedMasterSecret
-	hello.vers = c.Version
 	hello.greaseExtension = c.GreaseExtension
 	hello.reversedExtensionOrder = c.ReversedExtensionOrder
+	hello.heartbeat = c.Heartbeat
+	hello.encryptThenMac = c.EncryptThenMac
 }
 
 // Access to net.Conn methods.
@@ -627,12 +638,14 @@ func (c *Conn) readChangeCipherSpec() error {
 
 // readRecordOrCCS reads one or more TLS records from the connection and
 // updates the record layer state. Some invariants:
-//   * c.in must be locked
-//   * c.input must be empty
+//   - c.in must be locked
+//   - c.input must be empty
+//
 // During the handshake one and only one of the following will happen:
 //   - c.hand grows
 //   - c.in.changeCipherSpec is called
 //   - an error is returned
+//
 // After the handshake one and only one of the following will happen:
 //   - c.hand grows
 //   - c.input is set
@@ -1442,9 +1455,13 @@ func (c *Conn) ConnectionState() ConnectionState {
 	state.ServerCertRequestExtensions = c.serverCertRequestExtensions
 	state.HelloRetryRequestExtensions = c.helloRetryRequestExtensions
 	state.CertificateExtensions = c.certificateExtensions
-	state.ClientHello = NewClientHelloMsg(c.clientHello)
+	if c.clientHello != nil {
+		newHello := NewClientHelloMsg(c.clientHello)
+		state.ClientHello = &newHello
+	}
 	state.SendAlerts = parseAlerts(c.sendAlerts)
 	state.RecvAlerts = parseAlerts(c.recvAlerts)
+	state.Pre13ECDHParams = c.pre13ecdhParam
 	state.Errors = c.errors
 
 	if state.HandshakeComplete {

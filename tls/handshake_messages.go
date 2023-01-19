@@ -97,6 +97,8 @@ type clientHelloMsg struct {
 	recordSizeLimit                  uint16
 	maxFragmentLength                uint8
 	extendedMasterSecret             bool
+	heartbeat                        uint8
+	encryptThenMac                   bool
 	greaseExtension                  uint16
 	reversedExtensionOrder           bool
 }
@@ -363,6 +365,20 @@ func (m *clientHelloMsg) marshal() []byte {
 				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 					b.AddUint16(m.recordSizeLimit)
 				})
+				extensionBytes = append(extensionBytes, b)
+			}
+			if m.heartbeat > 0 {
+				var b cryptobyte.Builder
+				b.AddUint16(ExtensionHeartbeat)
+				b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
+					b.AddUint8(m.heartbeat)
+				})
+				extensionBytes = append(extensionBytes, b)
+			}
+			if m.encryptThenMac {
+				var b cryptobyte.Builder
+				b.AddUint16(ExtensionEncryptThenMac)
+				b.AddUint16(0)
 				extensionBytes = append(extensionBytes, b)
 			}
 			if m.greaseExtension > 0 {

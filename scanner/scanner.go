@@ -18,16 +18,18 @@ import (
 )
 
 var ALL_SCANS = map[string]Scans{
-	"tls":  &scans.TLSScan{},
-	"http": &scans.HTTPScan{},
-	"ssh":  &scans.SSHScan{},
-	"scvs": &scans.SCSVScan{},
+	"tls":       &scans.TLSScan{},
+	"http":      &scans.HTTPScan{},
+	"ssh":       &scans.SSHScan{},
+	"scvs":      &scans.SCSVScan{},
+	"dissectls": &scans.DissecTLSScan{},
+	"jarm":      &scans.JARMScan{},
 }
 
 type Scans interface {
 	Init(opts *misc.Options, keylogFile io.Writer)
 	GetDefaultPort() int
-	Scan(conn net.Conn, target *scans.Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error)
+	Scan(conn net.Conn, target *scans.Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error)
 }
 
 // Scanner is the base struct that handles the scanning loop
@@ -179,27 +181,26 @@ func (s *Scanner) Interrupt() {
 	s.interrupted = true
 }
 
-func (s *Scanner) scanThread(wgScoped *sync.WaitGroup, limiterScoped *rate.Limiter, ctx context.Context) {
+func (s *Scanner) scanThread(wgScoped *sync.WaitGroup, limiter *rate.Limiter, ctx context.Context) {
 
 	for target, ok := <-s.Input; ok && !s.interrupted; target, ok = <-s.Input {
 
-		err := limiterScoped.Wait(ctx)
+		err := limiter.Wait(ctx)
 		if err != nil {
 			log.Debug().Err(err).Msg("Error while waiting for query limiter")
 		}
 		atomic.AddUint64(&s.queries, 1)
 
-		s.Output <- s.scanTarget(target)
+		s.Output <- s.scanTarget(target, limiter)
 	}
 
 	wgScoped.Done()
 }
 
-func (s *Scanner) scanTarget(target *scans.Target) *results.ScanResult {
+func (s *Scanner) scanTarget(target *scans.Target, limiter *rate.Limiter) *results.ScanResult {
 	// Establish TCP connection with timeout
 	synStart := time.Now().UTC()
 	dialer := net.Dialer{Timeout: s.SynTimeout, LocalAddr: s.SourceIP}
-	synEnd := time.Now().UTC()
 
 	address := target.Address(s.scans[0].GetDefaultPort())
 
@@ -229,6 +230,8 @@ func (s *Scanner) scanTarget(target *scans.Target) *results.ScanResult {
 		}
 	}()
 
+	synEnd := time.Now().UTC()
+
 	if err != nil {
 		result.AddResult(results.ScanSubResult{
 			SynStart: synStart,
@@ -246,7 +249,7 @@ func (s *Scanner) scanTarget(target *scans.Target) *results.ScanResult {
 				log.Err(err).Str("ip", address).Str("dn", target.Domain).Str("scan", s.scanNames[j]).Msg("Could not set new deadline for scan")
 			}
 		}
-		conn, err = s.scans[j].Scan(conn, target, &result, s.ConnTimeout, synStart, synEnd)
+		conn, err = s.scans[j].Scan(conn, target, &result, s.ConnTimeout, synStart, synEnd, limiter)
 		if err != nil {
 			log.Debug().Err(err).Str("ip", address).Str("dn", target.Domain).Str("scan", s.scanNames[j]).Str("Client-Hello", target.CHName).Msg("Error during scan")
 			return &result

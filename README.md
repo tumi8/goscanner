@@ -3,6 +3,7 @@
 goscanner is a tool for large-scale TLS, x509 Certificate, HTTP header, 
 and SSH scans developed at the TUM Chair of Network Architectures and Services (see [Authors](./AUTHORS.md)).
 
+Update (2023-01-19): goscanner can now reconstruct the TLS configuration on a server and fingerprint with JARM [DissecTLS](https://dissectls.github.io)
 Update (2022-05-24): goscanner is now able to [actively fingerprint TLS servers](https://active-tls-fingerprinting.github.io)
 
 ## Building
@@ -14,7 +15,7 @@ Steps for building goscanner:
 
 ## Configuring Scans
 
-goscanner supports multipe types of scans. Among them are [ tls, http, ssh, scvs].
+goscanner supports multipe types of scans. Among them are [ tls, http, ssh, scvs, dissectls, jarm].
 Some scans can be chained (e.g., tls and http to scan https). 
 In these cases they will reuse the same TCP connection.
 See `example.conf` how to configure the default https scan.
@@ -41,7 +42,7 @@ The IP, domain tuples can be generated, for example, with [massdns](https://gith
     | jq '[.name,.data.answers[-1].data]  | @csv' -r \
     | csvtool col 1,2 - | awk -F, '$2!=""' > input.csv
 
-goscanner provides a utility function to enhance the input with the client hellos 
+goscanner provides a utility function to enhance the input with the client hellos
 (we recommend randomizing the input to reduce bursts on target servers).
 The new input files will contain the cross product between the set of client hellos and the original input set of targets.
 The names of the client hellos are the names of all json files in the `--ch-dir` (e.g., `client_hello_1.json`).
@@ -69,13 +70,25 @@ goscanner will download possible parameters for the CHs from IANA into the `tmp`
 
 ## Active TLS Stack Fingerprinting
 
-goscanner is able to fingerprint TLS servers as described by [Active TLS Stack Fingerprinting](https://active-tls-fingerprinting.github.io).
+goscanner is able to fingerprint TLS servers as described by [active-tls-fingerprinting.github.io](https://active-tls-fingerprinting.github.io).
 Additionally, this site provides optimized client hellos for fingerprinting.
 If you use the goscanner for fingerprinting, please cite our paper.
 
 The goscanner is able to post-process a scan with multiple CHs per target to generate the fingerprints.
 
     ./goscanner generate-fingerprints --scanner-dir ./tls-scanner-output [-ch-dir ./client-hellos]
+
+## DissecTLS
+
+goscanner is able to reconstruct the TLS configuration from servers as described by [dissectls.github.io](https://dissectls.github.io).
+If you use the DissecTLS functionality, please cite our paper.
+Information the goscanner can collect:
+
+- The supported TLS version (only 1.0, 1.1, 1.2, and 1.3)
+- The order of all supported ciphers, supported groups, and ALPNs
+- the ALPN, supported groups, supported groups with key share, and cipher preference: client or server
+- The order of the TLS extensions
+- Whether a server reacts to missing ciphers, supported group, and ALPNs with TLS Alerts, TCP Errors, or just ignores the values we send
 
 ## Reading logs
 

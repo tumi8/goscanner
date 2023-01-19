@@ -44,4 +44,9 @@ type Options struct {
 	CreateCHCommand             cmd.CreateCHCommand             `command:"create-ch" description:"Create Client Hellos"`
 	CreateCHInputCommand        cmd.CreateCHInputCommand        `command:"create-ch-input" description:"Generate Cross Product between Client Hellos and input file"`
 	GenerateFingerprintsCommand cmd.GenerateFingerprintsCommand `command:"generate-fingerprints" description:"Generate the Active TLS Stack Fingerprints from a Goscanner output"`
+
+	DissecTLSMode        string  `long:"dissectls-mode" description:"Set the mode of the DeppTLSScan: 'recommended', 'go', 'all'" default:"all"`
+	DissecTLSMaxCHs      int     `long:"dissectls-max-chs" description:"Max Number of CHS for the DeppTLSScan" default:"100"`
+	DissecTLSQps         float64 `long:"dissectls-qps" description:"QPS to to scan the same target" default:"10"`
+	DissecTLSLightweight bool    `long:"dissectls-light" description:"Use fewer requests, might not find as much details about the servers"`
 }

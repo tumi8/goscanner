@@ -3,12 +3,13 @@ package scans
 import (
 	"bufio"
 	"context"
+	tls2 "crypto/tls"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/goscanner/tls"
 	"golang.org/x/net/http2"
+	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"net/http"
@@ -55,7 +56,7 @@ func (s *HTTPScan) Init(opts *misc.Options, keylogFile io.Writer) {
 	s.keyLogFile = keylogFile
 }
 
-func (s *HTTPScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time) (net.Conn, error) {
+func (s *HTTPScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error) {
 
 	cache := tls.NewLRUClientSessionCache(1)
 
@@ -81,7 +82,7 @@ func (s *HTTPScan) Scan(conn net.Conn, target *Target, result *results.ScanResul
 		if err == io.ErrUnexpectedEOF {
 			conn, _, _, err = reconnect(conn, timeout)
 			if err == nil {
-				conn, err = scanTLS(conn, target.Domain, timeout, 0, cache, nil, nil, target.CHName, s.keyLogFile)
+				conn, err = scanTLS(conn, target.Domain, timeout, 0, cache, nil, nil, target.CHName, s.keyLogFile, nil)
 				if err != nil {
 					connError = s.processError(err, req.method, req.path, "Error during tcp reconnect for http headers", result, synStart, synEnd)
 					continue
@@ -163,16 +164,6 @@ func (s *HTTPScan) processError(err error, method string, path string, message s
 	return err
 }
 
-type SingleConnPool struct {
-	t     *http2.Transport
-	cConn *http2.ClientConn
-}
-
-func (uc SingleConnPool) GetClientConn(_ *http.Request, _ string) (*http2.ClientConn, error) {
-	return uc.cConn, nil
-}
-func (uc SingleConnPool) MarkDead(_ *http2.ClientConn) {}
-
 // getHTTPHeaders sends a HTTP request and returns HTTP headers
 func (s *HTTPScan) getHTTPHeaders(conn net.Conn, serverName string, method string, path string, timeout time.Duration) (int, http.Header, string, error) {
 
@@ -191,29 +182,19 @@ func (s *HTTPScan) getHTTPHeaders(conn net.Conn, serverName string, method strin
 	}
 
 	// Mimic Google Chrome
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.36")
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36")
 	req.Header.Add("Host", serverName)
 
 	var resp *http.Response
 	if isHttp2 {
-		tp := http2.Transport{}
-		cConn, err := tp.NewClientConn(tlsConn)
+		tp := http2.Transport{
+			DialTLS: func(network, addr string, _ *tls2.Config) (net.Conn, error) {
+				return tlsConn, nil
+			},
+		}
+		resp, err = tp.RoundTrip(req)
 		if err != nil {
-			if misc.IsClosedConnErr(err) {
-				return -1, nil, "", io.ErrUnexpectedEOF
-			}
-			log.Err(err).Msg("Error creating client conn")
-			return -1, nil, "", err
-		} else {
-			myConnPool := SingleConnPool{t: &tp, cConn: cConn}
-			tp.ConnPool = myConnPool
-
-			resp, err = tp.RoundTrip(req)
-			if err != nil {
-				return 0, nil, "", nil
-			}
-
-			err = cConn.Shutdown(ctx)
+			return 0, nil, "", err
 		}
 	} else {
 		if err := req.Write(conn); err != nil {

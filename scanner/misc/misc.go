@@ -168,6 +168,13 @@ func MaxInt64(a, b int64) int64 {
 	return a
 }
 
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func PrintStacktrace(all bool) {
 	n := 0
 	buf := make([]byte, 1024)
