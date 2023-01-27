@@ -5,7 +5,7 @@ and SSH scans developed at the TUM Chair of Network Architectures and Services (
 
 | Update|  |
 |---|---|
-| 2023-01-19 | goscanner can now reconstruct the TLS configuration with on a server with [DissecTLS](https://dissectls.github.io) and collect JARM fingerprints |
+| 2023-01-19 | goscanner can now reconstruct the TLS configuration on a server with [DissecTLS](https://dissectls.github.io) and collect JARM fingerprints |
 | 2022-05-24 | goscanner is now able to [actively fingerprint TLS servers](https://active-tls-fingerprinting.github.io)|
 
 ## Building
