@@ -3,14 +3,19 @@ package scans
 import (
 	"crypto/x509"
 	"errors"
+	"fmt"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/rs/zerolog/log"
 	"github.com/tumi8/goscanner/scanner/misc"
 	"github.com/tumi8/goscanner/scanner/results"
 	"github.com/tumi8/goscanner/tls"
 	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
+	"gopkg.in/asn1-ber.v1"
 	"io"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,6 +26,7 @@ type TLSScan struct {
 	extendedTLSExport        bool
 	saveStapledOCSPResponses bool
 	keyLogFile               io.Writer
+	isStartTLS               bool
 }
 
 func (s *TLSScan) GetDefaultPort() int {
@@ -31,13 +37,104 @@ func (s *TLSScan) Init(opts *misc.Options, keylogFile io.Writer) {
 	s.extendedTLSExport = opts.TLSExtendedExport
 	s.saveStapledOCSPResponses = opts.TLSSaveStapledOcspResponses
 	s.keyLogFile = keylogFile
+	s.isStartTLS = opts.StartTLS
 }
 
-// ScanProtocol performs the actual TLS scan and adds results to the target
+const (
+	ldapStartTLSOID            = "1.3.6.1.4.1.1466.20037"
+	applicationExtendedRequest = 23
+)
+
+var messageID uint32 = 0
+
+func ldapError(packet *ber.Packet) error {
+	if len(packet.Children) >= 2 {
+		response := packet.Children[1]
+		if response.ClassType == ber.ClassApplication && response.TagType == ber.TypeConstructed && len(response.Children) >= 3 {
+			resultCode := uint16(response.Children[0].Value.(int64))
+			if resultCode == 0 { // No error
+				return nil
+			}
+		}
+	}
+
+	return errors.New("the packet contains an error")
+}
+
+func hasLDAPStartTLSOID(packet *ber.Packet) bool {
+	if len(packet.Children) >= 2 {
+		return strings.Contains(packet.Children[1].Data.String(), ldapStartTLSOID)
+	}
+	return false
+}
+
+func nextMessageID() uint32 {
+	messageID++
+	if messageID == 0 {
+		// avoid overflow of messageID and return 0 (see rfc4511#section-4.1.1.1 for messageID = 0)
+		messageID++
+	}
+	return messageID
+}
+
+func (s *TLSScan) startTLS(conn net.Conn, target *Target) (net.Conn, error) {
+	port, err := target.Port()
+	if err != nil {
+		port = strconv.Itoa(s.GetDefaultPort())
+	}
+	log.Debug().Str("Domain:Port", fmt.Sprintf("%s:%s", target.Domain, port)).Msg("Initiate StartTLS")
+	l, err := ldap.Dial("tcp", net.JoinHostPort(target.Domain, port))
+	if err != nil {
+		log.Fatal().Msg(err.Error())
+	}
+	defer l.Close()
+
+	packet := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAP Request")
+	packet.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, nextMessageID(), "MessageID"))
+	request := ber.Encode(ber.ClassApplication, ber.TypeConstructed, applicationExtendedRequest, nil, "Start TLS")
+	request.AppendChild(ber.NewString(ber.ClassContext, ber.TypePrimitive, 0, ldapStartTLSOID, "TLS Extended Command"))
+	packet.AppendChild(request)
+	log.Debug().Str("requestPacket", packet.Data.String()).Msg("Send request")
+
+	_, err = conn.Write(packet.Bytes())
+	if err != nil {
+		return conn, err
+	}
+
+	var packetResponse []byte
+	packetResponse = make([]byte, 1024) // typical right response is the ldapStartTLSOID, rfc4511#section-4.14.2
+	_, err = conn.Read(packetResponse)
+	if err != nil {
+		return conn, err
+	}
+
+	packet = ber.DecodePacket(packetResponse)
+	log.Debug().Str("responsePacket", packet.Data.String()).Msg("Got response")
+	err = ldapError(packet)
+	if err != nil {
+		return conn, err
+	}
+	if !hasLDAPStartTLSOID(packet) {
+		return conn, errors.New("the server did not responded with StartTLS")
+	}
+
+	return conn, nil
+}
+
+// Scan performs the actual TLS scan and adds results to the target
 func (s *TLSScan) Scan(conn net.Conn, target *Target, result *results.ScanResult, timeout time.Duration, synStart time.Time, synEnd time.Time, limiter *rate.Limiter) (net.Conn, error) {
-	serverName := target.Domain
+	if s.isStartTLS {
+		conn, err := s.startTLS(conn, target)
+		if err != nil {
+			s.isStartTLS = false
+			conn, err = s.Scan(conn, target, result, timeout, synStart, synEnd, limiter)
+			return conn, err
+		}
+	}
+
 	cache := tls.NewLRUClientSessionCache(1)
 
+	serverName := target.Domain
 	tlsConn, err := scanTLS(conn, serverName, timeout, 0, cache, nil, nil, target.CHName, s.keyLogFile, nil)
 	if tlsConn == nil {
 		return nil, err

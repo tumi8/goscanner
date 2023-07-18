@@ -38,6 +38,7 @@ type Options struct {
 	TLSExtendedExport           bool `long:"tls-extended-output" description:"Save a more verbose output of the tls scan, including tls extensions and fingerprint"`
 	HTTPExtendedExport          bool `long:"http-extended-output" description:"Save a verbose output for the http scan. This includes all HTTP headers."`
 	TLSSaveStapledOcspResponses bool `long:"tls-save-stapled-ocsp" description:"Save stapled ocsp-responses in a separate file"`
+	StartTLS                    bool `long:"starttls" description:"A list of protocols to attempt with StartTLS."`
 
 	KeyLogFile bool `long:"keylog-file" description:"If set a keylog file will be written to the output"`
 
