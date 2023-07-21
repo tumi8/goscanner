@@ -32,13 +32,12 @@ type Options struct {
 
 	SSH bool `long:"ssh" description:"Scan SSH instead of TLS"`
 
-	Scans      []string `short:"r" long:"scans" description:"A list of scans to run. Choose of tls,http,scvs,ssh. Some can be combined like tls,http for https scans. Order is important"`
+	Scans      []string `short:"r" long:"scans" description:"A list of scans to run. Choose of starttls_ldap,tls,http,scvs,ssh. Some can be combined like tls,http for https scans. Order is important"`
 	MemProfile bool     `long:"mem-profile" description:"Dump Mem Profile Files every 5 min to output directory"`
 
 	TLSExtendedExport           bool `long:"tls-extended-output" description:"Save a more verbose output of the tls scan, including tls extensions and fingerprint"`
 	HTTPExtendedExport          bool `long:"http-extended-output" description:"Save a verbose output for the http scan. This includes all HTTP headers."`
 	TLSSaveStapledOcspResponses bool `long:"tls-save-stapled-ocsp" description:"Save stapled ocsp-responses in a separate file"`
-	StartTLS                    bool `long:"starttls" description:"A list of protocols to attempt with StartTLS."`
 
 	KeyLogFile bool `long:"keylog-file" description:"If set a keylog file will be written to the output"`
 

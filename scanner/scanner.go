@@ -18,12 +18,13 @@ import (
 )
 
 var ALL_SCANS = map[string]Scans{
-	"tls":       &scans.TLSScan{},
-	"http":      &scans.HTTPScan{},
-	"ssh":       &scans.SSHScan{},
-	"scvs":      &scans.SCSVScan{},
-	"dissectls": &scans.DissecTLSScan{},
-	"jarm":      &scans.JARMScan{},
+	"tls":           &scans.TLSScan{},
+	"http":          &scans.HTTPScan{},
+	"ssh":           &scans.SSHScan{},
+	"scvs":          &scans.SCSVScan{},
+	"dissectls":     &scans.DissecTLSScan{},
+	"jarm":          &scans.JARMScan{},
+	"starttls_ldap": &scans.StartTLSLDAP{},
 }
 
 type Scans interface {

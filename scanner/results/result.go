@@ -25,6 +25,9 @@ const (
 	FileStapledOCSP = "stapled_ocsp_responses.csv"
 	FileJarm        = "jarm.csv"
 	FileKeyLog      = "tls-keylog"
+
+	// FileLdap file to save LDAP results
+	FileLdap = "ldap.csv"
 )
 
 type ScanResult struct {
@@ -36,7 +39,7 @@ type ScanResult struct {
 	CHName     string
 }
 
-// ScanResult contains the time when the measurement occurred and the result
+// ScanSubResult contains the time when the measurement occurred and the result
 type ScanSubResult struct {
 	SynStart time.Time
 	SynEnd   time.Time

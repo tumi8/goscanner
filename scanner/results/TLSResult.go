@@ -140,7 +140,7 @@ func (t *TLSResult) WriteCsv(writer *csv.Writer, parentResult *ScanResult, synSt
 	})
 }
 
-// handshakeErrorLookup returns a string for a certain handshake error
+// HandshakeErrorLookup returns a string for a certain handshake error
 func HandshakeErrorLookup(err error) string {
 	handshakeError := err.Error()
 	var result string
