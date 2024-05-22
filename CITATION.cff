@@ -22,6 +22,9 @@ authors:
     family-names: Zirngibl
     affiliation: Technical University of Munich
     orcid: 'https://orcid.org/0000-0002-2918-016X'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.11243061
 repository-code: 'https://github.com/tumi8/goscanner'
 abstract: >-
   The TUM goscanner is a tool for large-scale TLS, x509
