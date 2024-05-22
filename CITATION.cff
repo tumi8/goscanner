@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: TUM goscanner
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Oliver
+    email: gasser@net.in.tum.de
+    family-names: Gasser
+  - given-names: Markus
+    email: sosnowski@net.in.tum.de
+    family-names: Sosnowski
+    orcid: 'https://orcid.org/0000-0002-7322-5804'
+    affiliation: Technical University of Munich
+  - given-names: Patrick
+    family-names: Sattler
+    orcid: 'https://orcid.org/0000-0001-9375-3113'
+    affiliation: Technical University of Munich
+  - given-names: Johannes
+    family-names: Zirngibl
+    affiliation: Technical University of Munich
+    orcid: 'https://orcid.org/0000-0002-2918-016X'
+repository-code: 'https://github.com/tumi8/goscanner'
+abstract: >-
+  The TUM goscanner is a tool for large-scale TLS, x509
+  Certificate, HTTP header, and SSH scans developed at the
+  TUM Chair of Network Architectures and Services.
+license: GPL-3.0
