@@ -1,5 +1,7 @@
 # TUM goscanner
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.11243061.svg)](https://doi.org/10.5281/zenodo.11243061)
+
 goscanner is a tool for large-scale TLS, x509 Certificate, HTTP header, 
 and SSH scans developed at the TUM Chair of Network Architectures and Services (see [Authors](./AUTHORS.md)).
 
