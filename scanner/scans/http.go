@@ -182,7 +182,7 @@ func (s *HTTPScan) getHTTPHeaders(conn net.Conn, serverName string, method strin
 	}
 
 	// Mimic Google Chrome
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36")
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
 	req.Header.Add("Host", serverName)
 
 	var resp *http.Response
