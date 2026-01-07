@@ -7,8 +7,8 @@ and SSH scans developed at the TUM Chair of Network Architectures and Services (
 
 | Update|  |
 |---|---|
-| 2023-01-19 | goscanner can now reconstruct the TLS configuration on a server with [DissecTLS](https://dissectls.github.io) and collect JARM fingerprints |
-| 2022-05-24 | goscanner is now able to [actively fingerprint TLS servers](https://active-tls-fingerprinting.github.io)|
+| 2023-01-19 | goscanner can now reconstruct the TLS configuration on a server with [DissecTLS](https://tumi8.github.io/dissectls/) and collect JARM fingerprints |
+| 2022-05-24 | goscanner is now able to [actively fingerprint TLS servers](https://tumi8.github.io/active-tls-fingerprinting/)|
 
 ## Building
 
@@ -74,7 +74,7 @@ goscanner will download possible parameters for the CHs from IANA into the `tmp`
 
 ## Active TLS Stack Fingerprinting
 
-goscanner is able to fingerprint TLS servers as described by [active-tls-fingerprinting.github.io](https://active-tls-fingerprinting.github.io).
+goscanner is able to fingerprint TLS servers as described by [tumi8.github.io/active-tls-fingerprinting](https://tumi8.github.io/active-tls-fingerprinting/).
 Additionally, this site provides optimized client hellos for fingerprinting.
 If you use the goscanner for fingerprinting, please cite our paper.
 
@@ -84,7 +84,7 @@ The goscanner is able to post-process a scan with multiple CHs per target to gen
 
 ## DissecTLS
 
-goscanner is able to reconstruct the TLS configuration from servers as described by [dissectls.github.io](https://dissectls.github.io).
+goscanner is able to reconstruct the TLS configuration from servers as described by [tumi8.github.io/dissectls](https://tumi8.github.io/dissectls/).
 If you use the DissecTLS functionality, please cite our paper.
 Information the goscanner can collect:
 
